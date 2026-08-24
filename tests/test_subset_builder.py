@@ -14,7 +14,7 @@ def _trace(index: int, split: str, label: str, length: int, onset: str | None = 
         upper = int(length * fraction)
         lower = max(0, upper - 5)
         harm_onset = HarmOnset(
-            lower, upper, lower, upper, 1, lower, upper, None, None, None, "fixture"
+            lower, upper, lower, upper, 1, lower, upper, "fixture"
         )
         annotations = (
             PrefixAnnotation(0, upper, upper, 1, "unsafe", "unsafe", ("Violent",), (index,)),

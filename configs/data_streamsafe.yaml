@@ -8,7 +8,6 @@ loading:
 analysis:
   random_seed: 42
   preview_rows: 20
-  manual_review_sample: 100
 reports:
   figures_dir: reports/figures
   tables_dir: reports/tables

@@ -319,9 +319,6 @@ def _derive_harm_onset(
             sentence_index=annotation.end_sentence,
             lower_qwen_token=lower_token,
             upper_qwen_token=upper_token,
-            exact_character=None,
-            exact_byte=None,
-            exact_qwen_token=None,
             source="streamsafe_sentence_interval",
         )
     return None
@@ -370,6 +367,13 @@ def frame_to_traces(frame: pd.DataFrame) -> list[NormalizedTrace]:
     traces: list[NormalizedTrace] = []
     for record in frame.to_dict(orient="records"):
         onset_data = _json_or_none(record.get("harm_onset_json"))
+        if onset_data:
+            # Older local Parquet files may contain fields that are no longer part of the contract.
+            onset_data = {
+                key: value
+                for key, value in onset_data.items()
+                if key not in {"exact_character", "exact_byte", "exact_qwen_token"}
+            }
         prefix_data = json.loads(record["prefix_annotations_json"])
         traces.append(
             NormalizedTrace(

@@ -1,1 +1,0 @@
-trace_id,reviewer,review_date,final_label_correct,category_correct,onset_interval_correct,exact_unsafe_start_character,text_roundtrip_correct,cross_split_issue,suggested_label,suggested_categories,notes

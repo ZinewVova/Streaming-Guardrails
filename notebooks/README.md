@@ -2,6 +2,12 @@
 
 Ноутбуки объясняют ход анализа и визуализируют результаты. Переиспользуемая логика загрузки, проверки и агрегации должна находиться в `src/streamguard_bench/`, а не дублироваться в ячейках.
 
+- `01_streamsafe_eda.ipynb` — устройство и качество исходного StreamSafe;
+- `02_streamsafe_subset.ipynb` — состав и проверка итоговых 500 трасс.
+
+Готовый поднабор доступен в
+[Vovarus12go/streamsafe-500-boundaries](https://huggingface.co/datasets/Vovarus12go/streamsafe-500-boundaries).
+
 Перед открытием ноутбука установите проект в редактируемом режиме:
 
 ```bash

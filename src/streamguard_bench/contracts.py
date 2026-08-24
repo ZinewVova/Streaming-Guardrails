@@ -3,30 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
-
-
-@dataclass(frozen=True)
-class RawStreamSafeRecord:
-    """An untouched source record with provenance."""
-
-    source_file: str
-    source_split: str
-    source_row: int
-    raw_data: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class StreamingTrace:
-    """Canonical trace contract to be populated in the normalization stage."""
-
-    trace_id: str
-    prompt: str
-    response: str
-    final_label: str
-    harm_categories: tuple[str, ...]
-    language: str
-    unsafe_start_character: int | None
 
 
 @dataclass(frozen=True)
@@ -54,9 +30,6 @@ class HarmOnset:
     sentence_index: int
     lower_qwen_token: int | None
     upper_qwen_token: int | None
-    exact_character: int | None
-    exact_byte: int | None
-    exact_qwen_token: int | None
     source: str
 
 

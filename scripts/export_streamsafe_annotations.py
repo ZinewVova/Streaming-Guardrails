@@ -128,8 +128,6 @@ def _public_record(
 
 
 def _dataset_card(manifest: dict[str, Any]) -> str:
-    source_revision = manifest["source_revision"]
-    tokenizer_revision = manifest["tokenizer_revision"]
     contains_source_text = manifest["contains_source_text"]
     text_description = (
         "It includes the unchanged source prompt and full assistant response so it can be "
@@ -178,7 +176,6 @@ raw examples in public logs, screenshots, issues, or model demonstrations.
 ## Source and attribution
 
 - Source dataset: `Solitude0630/StreamSafe`
-- Pinned source revision: `{source_revision}`
 - Related paper: [SentGuard: Sentence-Level Streaming Guardrails for Large Language Models](https://arxiv.org/abs/2606.02041)
 - Source license: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 - Derived project: [Streaming Guardrails](https://github.com/ZinewVova/Streaming-Guardrails)
@@ -215,7 +212,7 @@ For an unsafe trace:
 
 Safe traces have null onset fields. Character and UTF-8 byte positions are zero-based.
 Token coordinates refer only to the assistant response and use
-`Qwen/Qwen3Guard-Stream-0.6B` at revision `{tokenizer_revision}`.
+`Qwen/Qwen3Guard-Stream-0.6B`. Exact technical versions are stored in `metadata.json`.
 
 ## Reconstruction
 
@@ -229,8 +226,8 @@ unchanged prompt and full response.
 - Prefix labels may contain annotation noise.
 - Categories are multi-label and imbalanced.
 - Strict matching excludes ambiguous and unmatched source prefixes rather than guessing.
-- This annotation layer should not be used as evidence that a character-level harmful onset
-  has been manually verified.
+- The interval is a sentence-level annotation boundary, not an exact character-level harmful
+  onset.
 
 ## License
 

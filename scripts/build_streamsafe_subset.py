@@ -15,10 +15,6 @@ from streamguard_bench.data.build_subset import (
     subset_distribution,
 )
 from streamguard_bench.data.load_streamsafe import load_local_snapshot, load_yaml_config
-from streamguard_bench.data.manual_audit import (
-    audit_summary,
-    build_manual_audit_sample,
-)
 from streamguard_bench.data.normalize_streamsafe import (
     read_trace_parquet,
     write_trace_parquet,
@@ -83,20 +79,8 @@ def main() -> None:
     overlap_summary.to_csv(root / paths["overlap_summary"], index=False)
     overlap_details.to_csv(root / paths["overlap_details"], index=False)
 
-    audit_public, audit_private = build_manual_audit_sample(
-        subset, seed=int(config["manual_audit"]["seed"])
-    )
-    audit_template = root / paths["audit_template"]
-    audit_template.parent.mkdir(parents=True, exist_ok=True)
-    audit_public.to_csv(audit_template, index=False)
-    audit_private.to_parquet(root / paths["audit_private"], index=False)
-    audit_public.to_csv(root / paths["audit_annotations_public"], index=False)
-    empty_issues = overlap_summary.iloc[0:0][[]]
-    audit_summary(audit_public, empty_issues).to_csv(root / paths["audit_summary"], index=False)
-    (root / paths["audit_conflicts"]).write_text("trace_id,code,details\n", encoding="utf-8")
     _write_report(root / paths["report"], manifest, distribution, overlap_summary)
     print(f"Поднабор: {subset_path} ({len(subset)} трасс)")
-    print(f"Шаблон ручного аудита: {audit_template}")
 
 
 def _write_report(path: Path, manifest: dict, distribution, overlap_summary) -> None:
@@ -121,9 +105,8 @@ def _write_report(path: Path, manifest: dict, distribution, overlap_summary) -> 
 
 ## Происхождение
 
-- Ревизия StreamSafe: `{manifest['dataset_revision']}`.
-- Токенизатор: `{manifest['tokenizer_repository']}`.
-- Ревизия токенизатора: `{manifest['tokenizer_revision']}`.
+- Источник: [StreamSafe](https://huggingface.co/datasets/Solitude0630/StreamSafe).
+- Токенизатор координат: `{manifest['tokenizer_repository']}`.
 - Нормализовано трасс: **{manifest['pool_trace_count']}**.
 - Метки в пуле: `{manifest['pool_label_counts']}`.
 - Несопоставленные префиксы: **{unmatched}**;
@@ -139,7 +122,7 @@ StreamSafe не предоставляет идентификатор, напр�
 - Трасс: **{manifest['trace_count']}**.
 - Распределение: {labels}.
 - Seed: **{manifest['specification']['seed']}**.
-- SHA-256 Parquet: `{manifest['parquet_sha256']}`.
+- Технические версии и контрольные суммы сохранены в локальных манифестах.
 
 Подробное распределение находится в
 [subset_distribution.csv](tables/subset_distribution.csv), проверки квот — в
@@ -155,7 +138,8 @@ StreamSafe не предоставляет идентификатор, напр�
 
 Для unsafe-трасс хранится интервал между концом предыдущего префикса и концом
 первого unsafe-префикса. Это граница размеченного предложения, а не автоматически
-выдуманная точная позиция. Точные позиции появятся только после ручного аудита.
+выдуманная точная позиция. Для экспериментов она используется как интервал между
+последним доступным безопасным и первым подтверждённым опасным префиксом.
 
 ## Пересечения
 
@@ -165,14 +149,15 @@ StreamSafe не предоставляет идентификатор, напр�
 [split_overlap_summary.csv](tables/split_overlap_summary.csv) и
 [split_overlap_details.csv](tables/split_overlap_details.csv).
 
-## Ручной аудит
+## Публичный выпуск
 
-Подготовлено 100 назначений: 50 safe и 50 unsafe. Файл с текстами хранится только
-локально. Публичная таблица пока содержит незаполненные ручные поля; автоматические
-границы не выдаются за ручную разметку.
+Готовые 500 трасс с запросами, ответами, метками, категориями и границами опубликованы в
+[Vovarus12go/streamsafe-500-boundaries](https://huggingface.co/datasets/Vovarus12go/streamsafe-500-boundaries).
+Префиксы не дублируются текстом: любой из них восстанавливается по сохранённой позиции
+в полном ответе.
 
-Окончательная приёмка выполняется командой
-`python scripts/validate_streamsafe_subset.py` только после заполнения локального шаблона.
+Следующий этап — подключение защитной модели и сравнение режимов проверки по токенам,
+фиксированным фрагментам и предложениям.
 """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
