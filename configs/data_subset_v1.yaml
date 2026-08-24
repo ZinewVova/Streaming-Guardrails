@@ -1,0 +1,43 @@
+dataset:
+  repository: Solitude0630/StreamSafe
+  revision: 16d0ff1f42e980bb99bd36125583361b15c664e3
+  cache_dir: data/raw/streamsafe
+tokenizer:
+  repository: Qwen/Qwen3Guard-Stream-0.6B
+  revision: 419364a715de9840d47b1457982f64ff37f90ed4
+  trust_remote_code: true
+normalization:
+  language: en
+  require_unique_prefix_alignment: true
+subset:
+  seed: 42
+  train_safe: 200
+  train_unsafe: 200
+  val_safe: 50
+  val_unsafe: 50
+  minimum_safe_per_length_bucket: 60
+  minimum_unsafe_early: 120
+  minimum_unsafe_middle: 50
+  minimum_unsafe_late: 40
+  minimum_category_examples: 5
+manual_audit:
+  seed: 42
+  safe_records: 50
+  unsafe_records: 50
+paths:
+  pool: data/processed/streamsafe_pool.parquet
+  subset: data/processed/streamsafe_subset_500.parquet
+  pool_manifest: data/processed/streamsafe_pool_manifest.json
+  subset_manifest: data/processed/streamsafe_subset_manifest.json
+  normalization_issues: data/interim/normalization_issues.csv
+  normalization_issue_summary: reports/tables/normalization_issue_summary.csv
+  subset_distribution: reports/tables/subset_distribution.csv
+  subset_validation: reports/tables/subset_validation.csv
+  overlap_summary: reports/tables/split_overlap_summary.csv
+  overlap_details: reports/tables/split_overlap_details.csv
+  audit_template: data/interim/manual_audit_100.csv
+  audit_private: data/interim/manual_audit_private.parquet
+  audit_annotations_public: reports/tables/manual_audit_annotations.csv
+  audit_summary: reports/tables/manual_audit_summary.csv
+  audit_conflicts: reports/tables/manual_audit_conflicts.csv
+  report: reports/streamsafe_subset_summary.md

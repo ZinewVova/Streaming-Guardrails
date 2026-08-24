@@ -4,9 +4,20 @@
 
 ## Текущий статус
 
-Первый этап завершён: реализованы воспроизводимая загрузка, проверка исходных данных и разведочный анализ [StreamSafe](https://huggingface.co/datasets/Solitude0630/StreamSafe) на ревизии `16d0ff1f42e980bb99bd36125583361b15c664e3`.
+Реализована автоматическая часть этапа подготовки данных для
+[StreamSafe](https://huggingface.co/datasets/Solitude0630/StreamSafe) на ревизии
+`16d0ff1f42e980bb99bd36125583361b15c664e3`:
 
-Исходные схемы сохранены без изменений. Нормализованный поднабор для итогового бенчмарка пока не создавался.
+- полные ответы однозначно сопоставляются с размеченными префиксами;
+- исходный текст сохраняется без изменений, а спорные случаи попадают в журнал;
+- формируется воспроизводимый поднабор из 500 трасс — 250 `safe` и 250 `unsafe`;
+- для опасных трасс вычисляется интервальная граница появления вреда;
+- границы переводятся в символы, байты, предложения и токены закреплённого токенизатора Qwen;
+- проверяются пересечения между обучающей, проверочной и тестовой частями;
+- подготовлено 100 назначений для ручного аудита.
+
+Автоматический поднабор готов и проходит проверки. Ручной аудит нельзя заменить кодом:
+публичный отчёт честно показывает `0/100`, пока рецензенты не заполнят локальный шаблон.
 
 ## Будущий конвейер
 
@@ -29,10 +40,14 @@ StreamSafe
 Требуется Python 3.11.
 
 ```bash
-python -m pip install -e ".[analysis,dev]"
+python -m pip install -e ".[analysis,dev,tokenization]"
 python scripts/download_streamsafe.py
 python scripts/run_data_validation.py
 jupyter notebook notebooks/01_streamsafe_eda.ipynb
+python scripts/prepare_streamsafe_pool.py
+python scripts/build_streamsafe_subset.py
+python scripts/validate_streamsafe_subset.py --skip-manual
+jupyter notebook notebooks/02_streamsafe_subset.ipynb
 pytest
 ```
 
@@ -42,7 +57,7 @@ pytest
 
 - `configs/` — версионируемые настройки данных и экспериментов;
 - `notebooks/` — поясняющий анализ и визуализации;
-- `scripts/` — небольшие команды для загрузки и проверки данных;
+- `scripts/` — отдельные команды загрузки, нормализации, выбора и проверки;
 - `src/streamguard_bench/data/` — загрузка, инспекция схемы и валидация;
 - `src/streamguard_bench/guards/` — общий интерфейс адаптеров защитных моделей;
 - `src/streamguard_bench/streaming/` — общий интерфейс потоковых политик;
@@ -67,6 +82,27 @@ python scripts/run_data_validation.py --config configs/data_streamsafe.yaml
 
 Выполненный анализ находится в `notebooks/01_streamsafe_eda.ipynb`, самостоятельный отчёт — в `reports/eda_summary.md`, графики и агрегированные таблицы — в `reports/figures/` и `reports/tables/`.
 
+## Построение нормализованного поднабора
+
+Команды выполняются последовательно:
+
+```bash
+python scripts/prepare_streamsafe_pool.py
+python scripts/build_streamsafe_subset.py
+python scripts/validate_streamsafe_subset.py --skip-manual
+jupyter notebook notebooks/02_streamsafe_subset.ipynb
+```
+
+Первая команда строит локальный пул и закрепляет ревизию токенизатора. Вторая создаёт
+поднабор, отчёт о пересечениях и назначения ручного аудита. Третья проверяет все
+автоматические квоты. Флаг `--skip-manual` разрешён только до завершения человеческой
+разметки; окончательная приёмка запускается без него.
+
+Локальные файлы `data/processed/streamsafe_pool.parquet`,
+`data/processed/streamsafe_subset_500.parquet` и
+`data/interim/manual_audit_private.parquet` содержат исходные тексты и не попадают в
+Git. Контракт полей и правила координат описаны в [docs/data_contract.md](docs/data_contract.md).
+
 ## Работа с чувствительным содержанием
 
 StreamSafe содержит вредоносные и нарушающие политики примеры. Полные записи нельзя публиковать в задачах GitHub, запросах на слияние, журналах выполнения, графиках и сохранённых выводах ноутбука. В публичных материалах допустимы агрегированная статистика, идентификаторы и нейтральные либо скрытые фрагменты.
@@ -83,7 +119,7 @@ StreamSafe содержит вредоносные и нарушающие по�
 
 Общие контракты находятся в `src/streamguard_bench/contracts.py`. Следующие участники смогут:
 
-1. преобразовать исходные записи в объекты `StreamingTrace`;
+1. использовать готовые объекты `NormalizedTrace` и их размеченные префиксы;
 2. реализовать точки проверки по токенам, фрагментам и предложениям через `StreamingPolicy`;
 3. подключить Qwen3Guard-Stream через протокол `Guard`;
 4. сохранять решения в виде объектов `EvaluationRecord`;

@@ -31,7 +31,10 @@ dev = [
 models = [
   "accelerate>=1.2",
   "torch>=2.5",
-  "transformers>=4.47",
+  "transformers>=4.55",
+]
+tokenization = [
+  "transformers>=4.55",
 ]
 
 [tool.setuptools.packages.find]

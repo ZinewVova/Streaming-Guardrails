@@ -1,0 +1,22 @@
+dimension,source_split,binary_label,count,length_bucket,onset_bucket,harm_category
+source_split+binary_label,train,safe,200,,,
+source_split+binary_label,train,unsafe,200,,,
+source_split+binary_label,val,safe,50,,,
+source_split+binary_label,val,unsafe,50,,,
+binary_label+length_bucket,,safe,83,long,,
+binary_label+length_bucket,,safe,83,medium,,
+binary_label+length_bucket,,safe,84,short,,
+binary_label+length_bucket,,unsafe,74,long,,
+binary_label+length_bucket,,unsafe,79,medium,,
+binary_label+length_bucket,,unsafe,97,short,,
+unsafe_onset_bucket,,,155,,early,
+unsafe_onset_bucket,,,40,,late,
+unsafe_onset_bucket,,,55,,middle,
+harm_category,,,27,,,Copyright Violation
+harm_category,,,184,,,Non-violent Illegal Acts
+harm_category,,,82,,,Personally Identifiable Information
+harm_category,,,83,,,Politically Sensitive Topics
+harm_category,,,13,,,Sexual Content or Sexual Acts
+harm_category,,,1,,,Suicide & Self-Harm
+harm_category,,,190,,,Unethical Acts
+harm_category,,,27,,,Violent

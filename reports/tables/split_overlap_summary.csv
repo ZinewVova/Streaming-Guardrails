@@ -1,0 +1,13 @@
+left_split,right_split,comparison,shared_values,left_rows,right_rows
+train,val,prompt_hash,5,18,9
+train,val,response_hash,1,1,1
+train,val,pair_hash,1,1,1
+train,val,canonical_response_hash,1,1,1
+train,test,prompt_hash,90,143,271
+train,test,response_hash,0,0,0
+train,test,pair_hash,0,0,0
+train,test,canonical_response_hash,0,0,0
+val,test,prompt_hash,3,3,13
+val,test,response_hash,0,0,0
+val,test,pair_hash,0,0,0
+val,test,canonical_response_hash,0,0,0
