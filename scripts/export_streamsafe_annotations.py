@@ -104,6 +104,13 @@ def _public_record(
         {
         "label": trace.binary_label,
         "harm_categories": list(trace.harm_categories),
+        "last_safe_end_character": onset.lower_character if onset else None,
+        "first_unsafe_end_character": onset.upper_character if onset else None,
+        "last_safe_end_byte_utf8": onset.lower_byte if onset else None,
+        "first_unsafe_end_byte_utf8": onset.upper_byte if onset else None,
+        "first_unsafe_sentence": onset.sentence_index if onset else None,
+        "last_safe_end_qwen_token": onset.lower_qwen_token if onset else None,
+        "first_unsafe_end_qwen_token": onset.upper_qwen_token if onset else None,
         "trace_id": trace.trace_id,
         "source_split": trace.source_split,
         "full_response_source_file": f"full_response_mix2.1-8k-{split_suffix}.jsonl",
@@ -115,13 +122,6 @@ def _public_record(
         "prefix_harm_categories": [
             list(item.harm_categories) for item in trace.prefix_annotations
         ],
-        "last_safe_end_character": onset.lower_character if onset else None,
-        "first_unsafe_end_character": onset.upper_character if onset else None,
-        "last_safe_end_byte_utf8": onset.lower_byte if onset else None,
-        "first_unsafe_end_byte_utf8": onset.upper_byte if onset else None,
-        "first_unsafe_sentence": onset.sentence_index if onset else None,
-        "last_safe_end_qwen_token": onset.lower_qwen_token if onset else None,
-        "first_unsafe_end_qwen_token": onset.upper_qwen_token if onset else None,
         }
     )
     return record
@@ -195,10 +195,12 @@ The original authors do not endorse this derived release.
 
 ## Columns
 
-The first four columns are `prompt`, `response`, `label`, and `harm_categories`.
-`label` is the final binary `safe` or `unsafe` judgment. `prefix_labels` preserves the
-three original prefix states: `safe`, `uncertain`, and `unsafe`. Constant provenance and
-tokenizer values are stored once in `metadata.json` rather than repeated in every row.
+The first four columns are `prompt`, `response`, `label`, and `harm_categories`. They are
+followed by the unsafe-onset interval in character, UTF-8 byte, sentence, and Qwen-token
+coordinates. `label` is the final binary `safe` or `unsafe` judgment. `prefix_labels`
+preserves the three original prefix states: `safe`, `uncertain`, and `unsafe`. Constant
+provenance and tokenizer values are stored once in `metadata.json` rather than repeated
+in every row.
 
 ## Boundary semantics
 

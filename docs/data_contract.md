@@ -70,11 +70,12 @@ StreamSafe размечает префиксы на границах предл�
 
 Полный производный набор опубликован в
 [Vovarus12go/streamsafe-500-boundaries](https://huggingface.co/datasets/Vovarus12go/streamsafe-500-boundaries)
-на ревизии `f272baa8eecf6d49e38f53cd77c65fbc0e30ff58`. Он содержит исходные поля `prompt`
+на ревизии `e116cc5278e640e92b7c52fd892f4db1ddea4ba3`. Он содержит исходные поля `prompt`
 и `response`, но не дублирует тексты префиксов: каждый префикс восстанавливается как
 `response[:prefix_end_characters[i]]`. Карточка набора содержит атрибуцию StreamSafe,
 предупреждение о чувствительном содержании и описание интервальной семантики границ.
 
-Первые четыре столбца выпуска: `prompt`, `response`, `label`, `harm_categories`. Постоянные
-значения источника и токенизатора вынесены в `metadata.json`, а промежуточные метки
-`safe`, `uncertain`, `unsafe` сохранены в едином поле `prefix_labels`.
+Первые четыре столбца выпуска: `prompt`, `response`, `label`, `harm_categories`. Сразу за
+ними расположен блок интервальной границы в символах, байтах, предложениях и токенах
+Qwen. Постоянные значения источника и токенизатора вынесены в `metadata.json`, а
+промежуточные метки `safe`, `uncertain`, `unsafe` сохранены в едином поле `prefix_labels`.
