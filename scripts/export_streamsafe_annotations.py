@@ -72,7 +72,7 @@ def main() -> None:
         "tokenizer_revision": config["tokenizer"]["revision"],
         "records": len(frame),
         "split_counts": frame["source_split"].value_counts().sort_index().to_dict(),
-        "label_counts": frame["binary_label"].value_counts().sort_index().to_dict(),
+        "label_counts": frame["label"].value_counts().sort_index().to_dict(),
         "contains_source_text": args.include_source_text,
         "files_sha256": checksums,
     }
@@ -96,28 +96,25 @@ def _public_record(
 ) -> dict[str, Any]:
     onset = trace.harm_onset
     split_suffix = "train" if trace.source_split == "train" else "val"
-    record = {
+    record: dict[str, Any] = {}
+    if include_source_text:
+        record["prompt"] = trace.prompt
+        record["response"] = trace.response
+    record.update(
+        {
+        "label": trace.binary_label,
+        "harm_categories": list(trace.harm_categories),
         "trace_id": trace.trace_id,
-        "source_repository": config["dataset"]["repository"],
-        "dataset_revision": trace.dataset_revision,
         "source_split": trace.source_split,
         "full_response_source_file": f"full_response_mix2.1-8k-{split_suffix}.jsonl",
         "full_response_source_row": trace.source_rows[0],
-        "binary_label": trace.binary_label,
-        "original_label": trace.original_label,
-        "harm_categories": list(trace.harm_categories),
-        "language": trace.language,
-        "response_characters": len(trace.response),
-        "response_bytes_utf8": len(trace.response.encode("utf-8")),
         "prefix_end_characters": [item.end_character for item in trace.prefix_annotations],
         "prefix_end_bytes_utf8": [item.end_byte for item in trace.prefix_annotations],
         "prefix_end_sentences": [item.end_sentence for item in trace.prefix_annotations],
-        "prefix_binary_labels": [item.binary_label for item in trace.prefix_annotations],
-        "prefix_original_labels": [item.original_label for item in trace.prefix_annotations],
-        "prefix_harm_categories_json": json.dumps(
-            [list(item.harm_categories) for item in trace.prefix_annotations],
-            ensure_ascii=False,
-        ),
+        "prefix_labels": [item.original_label for item in trace.prefix_annotations],
+        "prefix_harm_categories": [
+            list(item.harm_categories) for item in trace.prefix_annotations
+        ],
         "last_safe_end_character": onset.lower_character if onset else None,
         "first_unsafe_end_character": onset.upper_character if onset else None,
         "last_safe_end_byte_utf8": onset.lower_byte if onset else None,
@@ -125,13 +122,8 @@ def _public_record(
         "first_unsafe_sentence": onset.sentence_index if onset else None,
         "last_safe_end_qwen_token": onset.lower_qwen_token if onset else None,
         "first_unsafe_end_qwen_token": onset.upper_qwen_token if onset else None,
-        "onset_source": onset.source if onset else None,
-        "tokenizer_repository": config["tokenizer"]["repository"],
-        "tokenizer_revision": config["tokenizer"]["revision"],
-    }
-    if include_source_text:
-        record["prompt"] = trace.prompt
-        record["response"] = trace.response
+        }
+    )
     return record
 
 
@@ -200,6 +192,13 @@ The original authors do not endorse this derived release.
 - 500 records: 250 `safe`, 250 `unsafe`.
 - 400 records from StreamSafe `train`, 100 from `validation`.
 - The StreamSafe test split is not included because it has no labeled prefix sequence.
+
+## Columns
+
+The first four columns are `prompt`, `response`, `label`, and `harm_categories`.
+`label` is the final binary `safe` or `unsafe` judgment. `prefix_labels` preserves the
+three original prefix states: `safe`, `uncertain`, and `unsafe`. Constant provenance and
+tokenizer values are stored once in `metadata.json` rather than repeated in every row.
 
 ## Boundary semantics
 
