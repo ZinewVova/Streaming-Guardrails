@@ -1,34 +1,81 @@
-# StreamSafe exploratory analysis
+# Разведочный анализ StreamSafe
 
-## Dataset version
+## Версия набора
 
-- Repository: `Solitude0630/StreamSafe`
-- Immutable revision: `16d0ff1f42e980bb99bd36125583361b15c664e3`
-- License declared by the source: CC BY 4.0
+- Репозиторий: [`Solitude0630/StreamSafe`](https://huggingface.co/datasets/Solitude0630/StreamSafe)
+- Неизменяемая ревизия: `16d0ff1f42e980bb99bd36125583361b15c664e3`
+- Лицензия, указанная источником: Creative Commons Attribution 4.0
 
-## Files and schemas
+## Как устроены таблицы
 
-The snapshot contains 5 data tables and 61,811 rows: 7,730 full-response rows, 52,881 partial-response rows, and 1,200 held-out test rows. Full and partial training tables share six fields; the held-out test table has a separate four-field binary-label schema. See `reports/tables/dataset_overview.csv` and `raw_schema_summary.csv`.
+StreamSafe логически состоит из **трёх конфигураций**, но физически содержит **пять таблиц**: `full_response` и `partial_response` разделены на обучение и валидацию, а `test` представлен одной отложенной тестовой таблицей. Всего загружено **61,811 строк**. Точные размеры и поля приведены в [dataset_overview.csv](tables/dataset_overview.csv) и [raw_schema_summary.csv](tables/raw_schema_summary.csv).
 
-## Labels and harm categories
+### 1. Полные ответы — `full_response`
 
-The source exposes three-way `answer` labels for training and validation and binary `label` values for test. Aggregate counts are {'safe': 29285, 'uncertain': 6544, 'unsafe': 25982}. Harm categories are multi-label; their distribution is recorded in `harm_category_distribution.csv`.
+Две таблицы содержат **7,730 законченных пар** «запрос пользователя — полный ответ модели»: 6 958 строк для обучения и 772 для валидации. Они предназначены для обычной классификации безопасности после завершения ответа. Поля: `query`, `response`, `response_mode`, `risk_level`, `violated_categories`, `answer`.
 
-## Length and prefix structure
+### 2. Частичные ответы — `partial_response`
 
-A total of 3,249 response traces could be reconstructed from uniquely matched prefixes. The unique-prefix alignment rate is 31.90%. Among reconstructed traces, 1,138 contain an observed unsafe prefix and 42 first become unsafe after at least 75% of the full response length. See `prefix_alignment_quality.csv` and `prefix_transition_summary.csv`.
+Две таблицы содержат **52,881 префиксных строк**: 49 286 для обучения и 3 595 для валидации. Префикс — это накопленное начало ответа, обрезанное на одной из промежуточных **границ предложений**. Его размер не фиксирован ни в словах, ни в токенах. Каждый префикс размечен отдельно, поэтому последовательность одного ответа может менять метку по мере роста, например `safe → uncertain → unsafe`. Схема полей совпадает с `full_response`, но поле `response` содержит только доступную на данном шаге часть ответа.
 
-## Data-quality findings
+Условный безопасно отредактированный пример:
 
-The raw validation found 206 rows participating in exact duplicate prompt-response groups across source tables. Cross-split leakage requires normalization. Prefixes without a unique full-response match are retained as unmatched or ambiguous rather than assigned heuristically.
+- полный ответ: «Сначала обсудим общие риски. ... `[опасная инструкция скрыта]` ... Поэтому выполнять такие действия нельзя» → `unsafe`;
+- ранний префикс: «Сначала обсудим общие риски.» → `safe`; более длинный префикс с началом скрытой инструкции → `unsafe`.
 
-## Recommendation for the first benchmark subset
+### 3. Отложенный тест — `test`
 
-A 500-trace baseline subset is feasible from the available label counts. Sampling should operate on normalized trace identifiers, stratify by final safety label and harm category, and explicitly include early-, middle-, and late-onset unsafe traces.
+Тестовая таблица содержит **1,200 полных ответов**, а не смесь полных ответов и префиксов. Она использует четыре поля: `query`, `response`, `label`, `violated_categories`. В отличие от обучения и валидации, метка бинарная — только `safe` или `unsafe`. Ответы содержат технические секции `<think>...</think><output>...</output>`, которые перед подачей в защитную модель потребуется обработать.
 
-## Next decisions
+## Метки безопасности
 
-- Normalize full and prefix records into a model-independent trace schema.
-- Define whether unsafe onset is the first unsafe sentence boundary or the first unsafe character span.
-- Build and manually audit the first balanced subset.
-- Keep unmatched and ambiguous prefix groups out of leakage metrics until reviewed.
+В `full_response` и `partial_response` поле `answer` принимает три значения:
+
+- **`safe`** — доступный ответ или префикс безопасен;
+- **`unsafe`** — опасное содержание уже присутствует или начало раскрываться;
+- **`uncertain`** — пограничный случай без уверенного решения.
+
+Во всех пяти таблицах насчитывается **29,285** строк `safe`, **25,982** строк `unsafe` и **6,544** строк `uncertain`. Это число строк, а не уникальных полных ответов: один ответ может давать несколько префиксов. Распределение по таблицам доступно в [label_distribution.csv](tables/label_distribution.csv) и на [графике меток](figures/label_distribution.png).
+
+## Категории вреда
+
+Поле `violated_categories` может содержать несколько значений. Используются восемь категорий:
+
+1. **Non-violent Illegal Acts** — ненасильственные незаконные действия;
+2. **Unethical Acts** — неэтичные действия;
+3. **Violent** — насилие и причинение физического вреда;
+4. **Politically Sensitive Topics** — политически чувствительные темы;
+5. **Personally Identifiable Information** — персональные идентифицирующие данные;
+6. **Copyright Violation** — нарушение авторских прав;
+7. **Sexual Content or Sexual Acts** — сексуальный контент или действия;
+8. **Suicide & Self-Harm** — самоубийство и самоповреждение.
+
+В **32,637 строках** агрегатор показывает `<missing>`. В данном случае это главным образом **пустой список нарушенных категорий**, ожидаемый для безопасных записей, а не девятая категория вреда. Поле физически существует, но применимая категория не указана. Так как разметка многометочная, сумма частот категорий может превышать число опасных строк. См. [harm_category_distribution.csv](tables/harm_category_distribution.csv) и [график категорий](figures/harm_category_distribution.png).
+
+## Длины текстов
+
+Длины рассчитаны в символах, байтах UTF-8, словах и приблизительных предложениях без сохранения исходного текста. Токены пока не подсчитывались: результат зависит от выбранного токенизатора защитной модели. Подробные статистики приведены в [length_statistics.csv](tables/length_statistics.csv), сравнение медианных длин — на [графике длин](figures/response_length_by_table.png).
+
+## Префиксная структура
+
+В исходных файлах нет общего идентификатора, напрямую связывающего префикс с полным ответом. Поэтому сопоставление выполнялось консервативно: одинаковый запрос, совместимый режим ответа и ровно один полный ответ, начинающийся с данного префикса. Однозначно сопоставлено **31.90%** префиксных строк, из которых восстановлено **3,249 трасс ответов**. Остальные строки сохранены как несопоставленные или неоднозначные и не назначались эвристически. См. [prefix_alignment_quality.csv](tables/prefix_alignment_quality.csv).
+
+**Число префиксов на трассу** показывает количество наблюдаемых состояний одного растущего ответа. **Число переходов** показывает, сколько раз менялась метка при добавлении предложений. Оба распределения представлены на [графике структуры префиксов](figures/prefix_structure.png).
+
+У **1,138** восстановленных трасс наблюдается хотя бы один опасный префикс; у **42** первая метка `unsafe` появляется только после достижения не менее 75% длины полного ответа. Это доля длины в символах на размеченной границе предложения, а не точная граница первого вредоносного символа. См. [prefix_transition_summary.csv](tables/prefix_transition_summary.csv) и [график позиции первого опасного префикса](figures/first_unsafe_prefix_position.png).
+
+## Качество данных и дубликаты
+
+Обнаружено **206 строк**, входящих в группы точных дубликатов пары `query + response` внутри исходных таблиц. Повтор только запроса сюда не относится: он ожидаем в `partial_response`, где одному запросу соответствует несколько префиксов. На этом этапе дубликаты **не удалялись**, чтобы сохранить источник неизменным; дедупликация должна выполняться после нормализации и проверки пересечений между частями. См. [raw_validation.csv](tables/raw_validation.csv) и [duplicate_summary.csv](tables/duplicate_summary.csv).
+
+## Рекомендация для первой выборки
+
+По объёму данных можно построить базовую выборку из 500 трасс. Отбор следует выполнять после нормализации по единому идентификатору трассы, балансировать по итоговой метке и категории вреда и отдельно включить случаи с ранним, средним и поздним появлением опасности. Неоднозначные и несопоставленные префиксы нельзя использовать в метриках утечки до ручной проверки.
+
+## Решения для следующего этапа
+
+- нормализовать полные ответы и префиксы в единую схему потоковой трассы;
+- определить, считать ли началом вреда первое опасное предложение или точную символьную границу;
+- проверить пересечения между обучением, валидацией и тестом;
+- построить и вручную проверить первый сбалансированный поднабор;
+- отдельно решить, как обрабатывать `uncertain` и технические секции тестовых ответов.

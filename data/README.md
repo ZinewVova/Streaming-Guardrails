@@ -1,9 +1,12 @@
-# Local data policy
+# Правила хранения данных
 
-Only synthetic fixtures are committed to Git. Real StreamSafe files are downloaded to
-`data/raw/streamsafe/` and ignored by Git. Intermediate tables belong in `data/interim/`,
-and normalized benchmark releases will later be written to `data/processed/` and published
-through Hugging Face Hub.
+В Git добавляются только полностью искусственные тестовые записи. Настоящие файлы StreamSafe загружаются в `data/raw/streamsafe/` и исключены из Git. Промежуточные таблицы следует сохранять в `data/interim/`. Нормализованные версии бенчмарка на следующих этапах будут записываться в `data/processed/` и при необходимости публиковаться через Hugging Face Hub.
 
-The source dataset contains sensitive safety examples. Do not paste full responses into
-issues, pull requests, logs, notebooks, or screenshots.
+Исходный набор содержит чувствительные примеры, предназначенные для исследования безопасности. Полные запросы и ответы нельзя копировать в задачи, запросы на слияние, журналы выполнения, ноутбуки и снимки экрана.
+
+Содержимое каталогов:
+
+- `fixtures/` — небольшие искусственные данные для автономных тестов;
+- `raw/` — неизменённые файлы источника и манифест загрузки;
+- `interim/` — временные результаты преобразований;
+- `processed/` — будущие нормализованные выпуски.

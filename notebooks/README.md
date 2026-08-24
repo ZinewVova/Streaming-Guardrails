@@ -1,11 +1,11 @@
-# Notebooks
+# Ноутбуки
 
-Notebooks explain analysis and visualize results. Reusable loading, validation, and summary
-logic belongs in `src/streamguard_bench/`. Install the project in editable mode before
-opening a notebook:
+Ноутбуки объясняют ход анализа и визуализируют результаты. Переиспользуемая логика загрузки, проверки и агрегации должна находиться в `src/streamguard_bench/`, а не дублироваться в ячейках.
+
+Перед открытием ноутбука установите проект в редактируемом режиме:
 
 ```bash
 python -m pip install -e ".[analysis,dev]"
 ```
 
-Do not persist complete sensitive prompts or responses in notebook outputs.
+Не сохраняйте в выводах полные чувствительные запросы и ответы. Допустимы агрегаты, технические идентификаторы и специально подготовленные нейтральные примеры.
