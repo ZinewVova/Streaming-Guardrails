@@ -1,0 +1,11 @@
+table,role,column,non_null_rows,duplicate_rows,duplicate_values
+full_response_mix2_1_8k_train,prompt,query,6958,3453,1280
+full_response_mix2_1_8k_train,response,response,6958,49,23
+full_response_mix2_1_8k_val,prompt,query,772,249,119
+full_response_mix2_1_8k_val,response,response,772,0,0
+partial_response_mix2_1_53k_train,prompt,query,49286,49269,4649
+partial_response_mix2_1_53k_train,response,response,49286,3361,1047
+partial_response_mix2_1_53k_val,prompt,query,3595,3591,451
+partial_response_mix2_1_53k_val,response,response,3595,49,13
+test,prompt,query,1200,374,116
+test,response,response,1200,2,1

@@ -1,0 +1,6 @@
+severity,table,code,count,details
+warning,full_response_mix2_1_8k_train,duplicate_rows,36,Duplicates measured on detected text columns
+info,full_response_mix2_1_8k_val,ok,772,No issues found
+warning,partial_response_mix2_1_53k_train,duplicate_rows,158,Duplicates measured on detected text columns
+warning,partial_response_mix2_1_53k_val,duplicate_rows,10,Duplicates measured on detected text columns
+warning,test,duplicate_rows,2,Duplicates measured on detected text columns

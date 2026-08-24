@@ -1,0 +1,15 @@
+table,column,value,count
+full_response_mix2_1_8k_train,answer,safe,3903
+full_response_mix2_1_8k_train,answer,unsafe,2965
+full_response_mix2_1_8k_train,answer,uncertain,90
+full_response_mix2_1_8k_val,answer,safe,424
+full_response_mix2_1_8k_val,answer,unsafe,334
+full_response_mix2_1_8k_val,answer,uncertain,14
+partial_response_mix2_1_53k_train,answer,safe,22570
+partial_response_mix2_1_53k_train,answer,unsafe,20620
+partial_response_mix2_1_53k_train,answer,uncertain,6096
+partial_response_mix2_1_53k_val,answer,safe,1705
+partial_response_mix2_1_53k_val,answer,unsafe,1546
+partial_response_mix2_1_53k_val,answer,uncertain,344
+test,label,safe,683
+test,label,unsafe,517

@@ -1,0 +1,6 @@
+table,rows,columns,memory_mb,column_names
+full_response_mix2_1_8k_train,6958,6,6.441,query | response | response_mode | risk_level | violated_categories | answer
+full_response_mix2_1_8k_val,772,6,0.714,query | response | response_mode | risk_level | violated_categories | answer
+partial_response_mix2_1_53k_train,49286,6,28.358,query | response | response_mode | risk_level | violated_categories | answer
+partial_response_mix2_1_53k_val,3595,6,2.076,query | response | response_mode | risk_level | violated_categories | answer
+test,1200,4,1.204,query | response | label | violated_categories

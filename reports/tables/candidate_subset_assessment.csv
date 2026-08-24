@@ -1,0 +1,5 @@
+question,answer_from_raw_inspection
+Are safe and unsafe labels discoverable?,"{'safe': 29285, 'unsafe': 25982, 'uncertain': 6544}"
+Are harm categories discoverable?,True
+Can prefix traces be grouped with current identifiers?,"{'uniquely_aligned_traces': 3249, 'unique_prefix_rate_percent': 31.9}"
+Is a balanced 500-trace subset immediately feasible?,True

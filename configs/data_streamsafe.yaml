@@ -1,0 +1,15 @@
+dataset:
+  repository: Solitude0630/StreamSafe
+  revision: 16d0ff1f42e980bb99bd36125583361b15c664e3
+  cache_dir: data/raw/streamsafe
+loading:
+  preserve_raw_text: true
+  allow_remote_code: false
+analysis:
+  random_seed: 42
+  preview_rows: 20
+  manual_review_sample: 100
+reports:
+  figures_dir: reports/figures
+  tables_dir: reports/tables
+  summary_path: reports/eda_summary.md
