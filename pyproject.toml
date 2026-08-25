@@ -31,10 +31,11 @@ dev = [
 models = [
   "accelerate>=1.2",
   "torch>=2.5",
-  "transformers>=4.55",
+  "transformers==4.55.0",
 ]
 tokenization = [
-  "transformers>=4.55",
+    "tiktoken>=0.14",
+    "pysbd>=0.3",
 ]
 
 [tool.setuptools.packages.find]

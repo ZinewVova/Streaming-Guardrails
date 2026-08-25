@@ -1,5 +1,5 @@
-"""Guard-model adapters."""
+from .qwen3_stream_guard import Qwen3GuardStreamAdapter
 
-from streamguard_bench.guards.base import Guard
-
-__all__ = ["Guard"]
+__all__ = [
+    "Qwen3GuardStreamAdapter",
+]
