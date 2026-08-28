@@ -1,0 +1,28 @@
+dataset:
+  repository: Vovarus12go/streamsafe-500-boundaries
+  revision: c36ddf315be89916c64fd6eb3b5a00ea6d505d1a
+
+model:
+  repository: Qwen/Qwen3Guard-Stream-0.6B
+  revision: 419364a715de9840d47b1457982f64ff37f90ed4
+  tokenizer_revision: 419364a715de9840d47b1457982f64ff37f90ed4
+
+experiment:
+  profile: smoke
+  seed: 42
+  modes:
+    - token
+    - chunk_8
+    - chunk_16
+    - chunk_32
+    - sentence
+    - full_buffered
+  policies:
+    - strict
+    - conservative
+  max_sentence_tokens: 128
+  output_dir: data/interim/qwen3guard_baseline
+
+runtime:
+  device: cuda
+  resume: true

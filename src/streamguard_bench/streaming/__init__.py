@@ -1,22 +1,26 @@
-from .engine import StreamingEngine
+"""Public interfaces for replaying streaming guard decisions."""
 
 from .data_classes import (
-    CheckMode,
-    WindowMode,
-    GuardAdapter,
-    CallableGuard,
-    Decision,
-    Event,
-    StreamResult,
+    DEFAULT_MODES,
+    DEFAULT_POLICIES,
+    BufferMode,
+    GuardTrace,
+    InterventionResult,
+    SafetyPolicy,
+    TokenDecision,
+    TokenizedResponse,
 )
+from .engine import simulate_all, simulate_intervention
 
 __all__ = [
-    "StreamingEngine",
-    "CheckMode",
-    "WindowMode",
-    "GuardAdapter",
-    "CallableGuard",
-    "Decision",
-    "Event",
-    "StreamResult",
+    "DEFAULT_MODES",
+    "DEFAULT_POLICIES",
+    "BufferMode",
+    "GuardTrace",
+    "InterventionResult",
+    "SafetyPolicy",
+    "TokenDecision",
+    "TokenizedResponse",
+    "simulate_all",
+    "simulate_intervention",
 ]

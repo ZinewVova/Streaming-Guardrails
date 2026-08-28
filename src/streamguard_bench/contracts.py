@@ -50,29 +50,3 @@ class NormalizedTrace:
     source_rows: tuple[int, ...]
     dataset_revision: str
     exclusion_reason: str | None
-
-
-@dataclass(frozen=True)
-class GuardDecision:
-    """One model decision made on a generated prefix."""
-
-    label: str
-    risk_score: float | None
-    generated_tokens: int
-    checked_tokens: int
-    latency_ms: float
-
-
-@dataclass(frozen=True)
-class EvaluationRecord:
-    """A model decision enriched with experiment context."""
-
-    trace_id: str
-    model_id: str
-    mode: str
-    generated_tokens: int
-    released_tokens: int
-    label: str
-    risk_score: float | None
-    blocked: bool
-    latency_ms: float

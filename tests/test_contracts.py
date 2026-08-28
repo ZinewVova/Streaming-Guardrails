@@ -1,6 +1,7 @@
-from streamguard_bench.contracts import GuardDecision
+from streamguard_bench.contracts import HarmOnset
 
 
-def test_guard_decision_keeps_numeric_context() -> None:
-    decision = GuardDecision("safe", 0.1, 10, 10, 2.5)
-    assert decision.generated_tokens == decision.checked_tokens == 10
+def test_harm_onset_keeps_interval_coordinates() -> None:
+    onset = HarmOnset(2, 5, 2, 6, 1, 2, 5, "fixture")
+    assert onset.lower_character == 2
+    assert onset.upper_character == 5

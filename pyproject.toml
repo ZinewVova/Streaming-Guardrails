@@ -33,9 +33,9 @@ models = [
   "torch>=2.5",
   "transformers==4.55.0",
 ]
+streaming = []
 tokenization = [
-    "tiktoken>=0.14",
-    "pysbd>=0.3",
+  "transformers==4.55.0",
 ]
 
 [tool.setuptools.packages.find]

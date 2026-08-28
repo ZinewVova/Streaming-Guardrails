@@ -1,0 +1,13 @@
+mode,policy,traces,failed_traces,false_positive_rate,false_negative_rate,leakage_min_mean,leakage_max_mean
+token,strict,10,0,0.2,0.0,0.0,0.4
+token,conservative,10,0,0.4,0.0,0.0,0.4
+chunk_8,strict,10,0,0.2,0.0,0.0,0.0
+chunk_8,conservative,10,0,0.4,0.0,0.0,0.0
+chunk_16,strict,10,0,0.2,0.0,0.0,0.0
+chunk_16,conservative,10,0,0.4,0.0,0.0,0.0
+chunk_32,strict,10,0,0.2,0.0,0.0,0.0
+chunk_32,conservative,10,0,0.4,0.0,0.0,0.0
+sentence,strict,10,0,0.2,0.0,0.0,0.0
+sentence,conservative,10,0,0.4,0.0,0.0,0.0
+full_buffered,strict,10,0,0.2,0.0,0.0,0.0
+full_buffered,conservative,10,0,0.4,0.0,0.0,0.0
