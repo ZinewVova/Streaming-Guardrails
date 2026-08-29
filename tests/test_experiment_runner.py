@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from streamguard_bench.experiments import run_experiment, select_profile_traces
+from streamguard_bench.experiments import (
+    load_experiment_run,
+    run_experiment,
+    select_profile_traces,
+)
 from streamguard_bench.streaming import TokenDecision, TokenizedResponse
 
 
@@ -102,6 +106,10 @@ def test_runner_produces_120_rows_and_resumes_without_rescoring(tmp_path: Path):
     assert "response" not in run.results.columns
     assert (run.output_dir / "results.csv").exists()
     assert (run.output_dir / "token_decisions.parquet").exists()
+
+    loaded = load_experiment_run(tmp_path, profile="smoke")
+    assert len(loaded.results) == 120
+    assert loaded.selected_trace_ids == run.selected_trace_ids
 
     resumed = run_experiment(
         dataset=_dataset(),

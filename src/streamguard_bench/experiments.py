@@ -57,6 +57,38 @@ def load_boundary_dataset(
     return _dataset_to_frame(load_dataset(repository, **kwargs))
 
 
+def load_experiment_run(
+    output_dir: str | Path = "data/interim/qwen3guard_baseline",
+    *,
+    profile: str = "smoke",
+) -> ExperimentRun:
+    """Load a previously checkpointed run without loading the dataset or model."""
+
+    run_dir = Path(output_dir) / profile
+    required = {
+        "results": run_dir / "results.csv",
+        "token_decisions": run_dir / "token_decisions.parquet",
+        "errors": run_dir / "errors.csv",
+        "selected_trace_ids": run_dir / "selected_trace_ids.json",
+    }
+    missing = [str(path) for path in required.values() if not path.exists()]
+    if missing:
+        raise FileNotFoundError(
+            "Saved experiment is incomplete. Missing files: " + ", ".join(missing)
+        )
+    selected_ids = tuple(
+        str(item)
+        for item in json.loads(required["selected_trace_ids"].read_text(encoding="utf-8"))
+    )
+    return ExperimentRun(
+        results=pd.read_csv(required["results"]),
+        token_decisions=pd.read_parquet(required["token_decisions"]),
+        errors=pd.read_csv(required["errors"]),
+        selected_trace_ids=selected_ids,
+        output_dir=run_dir,
+    )
+
+
 def select_profile_traces(
     dataset: Any,
     profile: str,
