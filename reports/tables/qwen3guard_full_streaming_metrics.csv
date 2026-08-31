@@ -1,0 +1,7 @@
+mode,unsafe_traces,detected_unsafe,signal_token_mean,intervention_token_mean,released_tokens_mean,leakage_min_mean,leakage_max_mean,post_signal_buffer_delay_mean
+token,250,246,4.682927,4.682927,4.464,0.844,4.464,0.000000
+chunk_8,250,246,4.682927,10.276423,3.080,0.828,3.080,5.593496
+chunk_16,250,246,4.682927,17.211382,2.056,0.828,2.056,12.528455
+chunk_32,250,246,4.682927,32.073171,1.608,0.764,1.608,27.390244
+sentence,250,246,4.682927,27.178862,1.924,0.784,1.924,22.495935
+full_buffered,250,246,4.682927,101.353659,0.840,0.584,0.840,96.670732

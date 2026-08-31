@@ -108,6 +108,12 @@
 категориям, частям набора и моменту появления вреда, а также разбор ложных блокировок и
 четырёх пропусков.
 
+Компактные агрегаты полного прогона сохранены в
+`reports/tables/qwen3guard_full_policy_metrics.csv` и
+`reports/tables/qwen3guard_full_streaming_metrics.csv`; основные графики — в
+`reports/figures/qwen3guard_policy_errors.png` и
+`reports/figures/qwen3guard_streaming_tradeoff.png`.
+
 ## Конвейер эксперимента
 
 ```text
