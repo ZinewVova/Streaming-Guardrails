@@ -6,7 +6,12 @@ import time
 from contextlib import nullcontext
 from typing import Any
 
-from streamguard_bench.streaming import TokenDecision, TokenizedResponse
+from streamguard_bench.contracts import PromptDecision, ResponseTokenDecision
+from streamguard_bench.streaming import TokenizedResponse
+
+
+class GuardOutputError(RuntimeError):
+    """Raised when the model violates the documented output protocol."""
 
 
 class Qwen3GuardStreamAdapter:
@@ -62,9 +67,7 @@ class Qwen3GuardStreamAdapter:
 
         if torch_dtype is None:
             if device == "cuda":
-                torch_dtype = (
-                    torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-                )
+                torch_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
             elif device == "mps":
                 torch_dtype = torch.float16
             else:
@@ -124,9 +127,7 @@ class Qwen3GuardStreamAdapter:
             raise ValueError("Token offsets do not cover the complete response")
         return TokenizedResponse(token_ids=token_ids, end_characters=end_characters)
 
-    def _decode_prefix_offsets(
-        self, token_ids: tuple[int, ...], response: str
-    ) -> tuple[int, ...]:
+    def _decode_prefix_offsets(self, token_ids: tuple[int, ...], response: str) -> tuple[int, ...]:
         offsets = []
         for end in range(1, len(token_ids) + 1):
             decoded = self.tokenizer.decode(
@@ -139,7 +140,9 @@ class Qwen3GuardStreamAdapter:
             offsets.append(len(decoded))
         return tuple(offsets)
 
-    def start(self, prompt: str) -> dict[str, Any]:
+    def start(
+        self, prompt: str, *, trace_id: str = "", query_ground_truth: str = ""
+    ) -> PromptDecision:
         """Start a new conversation using the tokenizer's official chat template."""
 
         self.close()
@@ -150,13 +153,22 @@ class Qwen3GuardStreamAdapter:
             add_generation_prompt=False,
         )
         model_input = self._model_input(_flatten(prompt_ids))
+        started = time.perf_counter()
         with self._inference_context():
             result, self.stream_state = self.model.stream_moderate_from_ids(
                 model_input,
                 role="user",
                 stream_state=None,
             )
-        return result
+        parsed = parse_guard_output(result)
+        return PromptDecision(
+            trace_id=trace_id,
+            query_ground_truth=query_ground_truth,
+            risk_label=parsed["risk_label"],
+            risk_categories=parsed["risk_categories"],
+            confidence=parsed["confidence"],
+            latency_ms=(time.perf_counter() - started) * 1000,
+        )
 
     def score_token(
         self,
@@ -164,7 +176,7 @@ class Qwen3GuardStreamAdapter:
         token_id: int,
         token_index: int,
         end_character: int,
-    ) -> TokenDecision:
+    ) -> ResponseTokenDecision:
         """Score exactly one new assistant token in the active stream."""
 
         if self.stream_state is None:
@@ -178,19 +190,14 @@ class Qwen3GuardStreamAdapter:
             )
         latency_ms = (time.perf_counter() - started) * 1000
 
-        label = str(_last(result.get("risk_level"), "safe")).lower()
-        if label not in {"safe", "controversial", "unsafe"}:
-            raise RuntimeError(f"Qwen3Guard returned an unknown risk level: {label!r}")
-        confidence = _optional_float(_last(result.get("risk_prob"), None))
-        category = _last(result.get("category"), None)
-        categories = () if category in {None, "", "None"} else (str(category),)
-        return TokenDecision(
+        parsed = parse_guard_output(result)
+        return ResponseTokenDecision(
             token_index=token_index,
             token_id=token_id,
             end_character=end_character,
-            risk_label=label,
-            risk_categories=categories,
-            label_confidence=confidence,
+            risk_label=parsed["risk_label"],
+            risk_categories=parsed["risk_categories"],
+            confidence=parsed["confidence"],
             latency_ms=latency_ms,
         )
 
@@ -221,8 +228,8 @@ class Qwen3GuardStreamAdapter:
 def _flatten(value: Any) -> list[Any]:
     if hasattr(value, "detach"):
         value = value.detach().cpu().tolist()
-    while isinstance(value, (list, tuple)) and len(value) == 1 and isinstance(
-        value[0], (list, tuple)
+    while (
+        isinstance(value, (list, tuple)) and len(value) == 1 and isinstance(value[0], (list, tuple))
     ):
         value = value[0]
     return list(value)
@@ -231,21 +238,54 @@ def _flatten(value: Any) -> list[Any]:
 def _normalize_offsets(value: Any) -> list[tuple[int, int]]:
     if hasattr(value, "detach"):
         value = value.detach().cpu().tolist()
-    while isinstance(value, (list, tuple)) and len(value) == 1 and isinstance(
-        value[0], (list, tuple)
-    ) and value[0] and isinstance(value[0][0], (list, tuple)):
+    while (
+        isinstance(value, (list, tuple))
+        and len(value) == 1
+        and isinstance(value[0], (list, tuple))
+        and value[0]
+        and isinstance(value[0][0], (list, tuple))
+    ):
         value = value[0]
     return [(int(start), int(end)) for start, end in value]
 
 
-def _last(value: Any, default: Any) -> Any:
+def _last_required(value: Any, field: str) -> Any:
     if value is None:
-        return default
+        raise GuardOutputError(f"Missing or null {field}")
     if hasattr(value, "detach"):
         value = value.detach().cpu().flatten().tolist()
     if isinstance(value, (list, tuple)):
-        return value[-1] if value else default
+        if not value:
+            raise GuardOutputError(f"Empty {field}")
+        return value[-1]
     return value
+
+
+def _last_optional(value: Any) -> Any:
+    if value is None:
+        return None
+    if hasattr(value, "detach"):
+        value = value.detach().cpu().flatten().tolist()
+    if isinstance(value, (list, tuple)):
+        return value[-1] if value else None
+    return value
+
+
+def parse_guard_output(result: Any) -> dict[str, Any]:
+    """Strict parser shared by prompt and response moderation."""
+
+    if not isinstance(result, dict) or "risk_level" not in result:
+        raise GuardOutputError("Missing risk_level")
+    raw_label = _last_required(result["risk_level"], "risk_level")
+    if raw_label is None or not str(raw_label).strip():
+        raise GuardOutputError("Empty risk_level")
+    label = str(raw_label).strip().lower()
+    if label not in {"safe", "controversial", "unsafe"}:
+        raise GuardOutputError(f"Unknown risk_level: {raw_label!r}")
+    confidence = _optional_float(_last_optional(result.get("risk_prob")))
+    category = _last_optional(result.get("category"))
+    categories = () if category in {None, "", "None"} else (str(category),)
+    return {"risk_label": label, "risk_categories": categories, "confidence": confidence}
 
 
 def _optional_float(value: Any) -> float | None:

@@ -6,10 +6,10 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .coverage
-data/raw/
-data/interim/
-data/processed/
-data/cache/
+**/data/raw/
+**/data/interim/
+**/data/processed/
+**/data/cache/
 *.safetensors
 *.bin
 .DS_Store

@@ -1,0 +1,11 @@
+check,passed,detail
+required_columns,True,
+row_count,True,210
+query_labels,True,
+response_labels,True,
+nonempty_text,True,
+onset_integer,True,
+onset_range,True,
+safe_prefix_exact,True,
+label_onset_consistency,True,
+unicode_unchanged,True,

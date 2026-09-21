@@ -1,0 +1,18 @@
+[
+  {
+    "Query": "Please explain a harmless topic.",
+    "Response": "A calm and entirely safe answer.",
+    "Query_Label": "safe",
+    "Response_Label": "safe",
+    "Unsafe_Start_Index": 32,
+    "Safe_Prefix": "A calm and entirely safe answer."
+  },
+  {
+    "Query": "A synthetic unsafe-labelled request.",
+    "Response": "A benign prefix. synthetic marker",
+    "Query_Label": "unsafe",
+    "Response_Label": "unsafe",
+    "Unsafe_Start_Index": 17,
+    "Safe_Prefix": "A benign prefix. "
+  }
+]
