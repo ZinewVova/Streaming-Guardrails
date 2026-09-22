@@ -35,7 +35,9 @@ def test_bad_safe_prefix_is_rejected():
     frame = fixture_frame()
     frame.loc[1, "Safe_Prefix"] = "wrong"
     report = validate_source(frame, expected_rows=None)
-    assert not report.set_index("check").loc["safe_prefix_exact", "passed"]
+    prefix_check = report.set_index("check").loc["safe_prefix_exact"]
+    assert not prefix_check["passed"]
+    assert prefix_check["detail"] == "1 matching, 1 mismatching"
 
 
 @pytest.mark.parametrize(("onset", "expected"), [(0, 1), (2, 2), (1, 1)])

@@ -72,9 +72,7 @@ def test_every_figure_renders_without_empty_axes():
         plots.plot_confusion_matrices(classification, title="response"),
         plots.plot_error_rates(classification, title="response"),
         plots.plot_signal_offset(results, policy="strict"),
-        plots.plot_leakage_ecdf(results, policy="strict"),
         plots.plot_leakage_intervals(streaming),
-        plots.plot_cost_tradeoff(streaming, results, policy="conservative"),
     ]
     assert all(figure.axes for figure in figures)
     assert len(figures[0].axes) == len(classification)

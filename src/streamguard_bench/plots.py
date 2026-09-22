@@ -303,45 +303,6 @@ def plot_signal_offset(results: pd.DataFrame, *, policy: str, bins: int = 20) ->
     return figure
 
 
-def plot_leakage_ecdf(results: pd.DataFrame, *, policy: str) -> Figure:
-    """Share of unsafe responses whose leakage stays at or below x tokens.
-
-    Line width decreases along the mode order so that identical curves stay visible.
-    """
-    rows = _valid(results)
-    rows = rows[(rows["policy"] == policy) & (rows["response_ground_truth"] == "unsafe")]
-    modes = _modes(rows)
-    figure, axis = _figure(figsize=(9, 4.2))
-    _style(axis)
-    widths = np.linspace(3.4, 1.4, max(len(modes), 1))
-    limit = float(rows["leakage_tokens"].max() or 0)
-    for width, mode in zip(widths, modes, strict=False):
-        values = np.sort(rows[rows["mode"] == mode]["leakage_tokens"].dropna().to_numpy(float))
-        if not len(values):
-            continue
-        share = np.arange(1, len(values) + 1) / len(values)
-        axis.step(
-            np.concatenate([[0], values, [limit + max(1.0, limit * 0.05)]]),
-            np.concatenate([[0 if values[0] > 0 else share[0]], share, [share[-1]]]),
-            where="post",
-            color=MODE_COLORS.get(mode, ACCENT),
-            linewidth=width,
-            label=mode,
-            zorder=3,
-        )
-    axis.set_ylim(0, 1.05)
-    axis.set_xlabel("выпущено опасных токенов (leakage)", color=MUTED, fontsize=9)
-    axis.set_ylabel("доля опасных ответов ≤ x", color=MUTED, fontsize=9)
-    _legend_below(axis, ncols=3, pad=-0.24)
-    _title(
-        axis,
-        "Накопленное распределение leakage",
-        f"policy: {policy} · {rows['trace_id'].nunique()} опасных трасс",
-    )
-    figure.tight_layout()
-    return figure
-
-
 def plot_leakage_intervals(streaming_metrics: pd.DataFrame, *, statistic: str = "mean") -> Figure:
     """Leakage point estimate per buffer mode with its bootstrap interval."""
     column = f"leakage_{statistic}"
@@ -371,74 +332,6 @@ def plot_leakage_intervals(streaming_metrics: pd.DataFrame, *, statistic: str = 
         f"Leakage по режимам буфера ({statistic})",
         "перекрывающиеся интервалы не дают вывода о преимуществе",
     )
-    figure.tight_layout()
-    return figure
-
-
-def plot_cost_tradeoff(
-    streaming_metrics: pd.DataFrame, results: pd.DataFrame, *, policy: str
-) -> Figure:
-    """Guard cost against leakage, and what safe responses pay for the same buffer."""
-    metrics = streaming_metrics[streaming_metrics["policy"] == policy]
-    rows = _valid(results)
-    safe = rows[(rows["policy"] == policy) & (rows["response_ground_truth"] == "safe")]
-    modes = _modes(metrics)
-    figure, (left, right) = _figure(1, 2, figsize=(12, 4.4))
-    _style(left)
-    _style(right, grid_axis="x")
-    ranked = list(metrics.set_index("mode").loc[modes, "checks_mean"].sort_values().index)
-    for mode in modes:
-        row = metrics[metrics["mode"] == mode].iloc[0]
-        left.plot(
-            row["checks_mean"], row["leakage_mean"], "o", color=ACCENT, markersize=10, zorder=3
-        )
-        left.annotate(
-            mode,
-            (row["checks_mean"], row["leakage_mean"]),
-            textcoords="offset points",
-            xytext=(0, (12, -20, 28)[ranked.index(mode) % 3]),
-            ha="center",
-            color=INK,
-            fontsize=9,
-        )
-    left.set_xscale("symlog")
-    if float(metrics["leakage_mean"].max() or 0) <= 0:
-        left.set_ylim(-0.5, 1.0)
-    left.margins(x=0.25, y=0.25)
-    left.set_xlabel("проверок guard на трассу (среднее)", color=MUTED, fontsize=9)
-    left.set_ylabel("leakage, среднее (токены)", color=MUTED, fontsize=9)
-    _title(left, "Стоимость против утечки", f"policy: {policy} · ось x логарифмическая")
-    if not safe.empty:
-        released = safe.groupby("mode")["released_tokens"].mean().reindex(modes)
-        withheld = safe.groupby("mode")["safe_withheld_tokens"].mean().reindex(modes)
-        positions = np.arange(len(modes))
-        right.barh(positions, released, height=0.55, color=ACCENT, label="выпущено", zorder=2)
-        right.barh(
-            positions,
-            withheld,
-            height=0.55,
-            left=released,
-            color=POLICY_COLORS["conservative"],
-            label="удержано",
-            edgecolor=SURFACE,
-            linewidth=2,
-            zorder=2,
-        )
-        for position, (shown, held) in enumerate(zip(released, withheld, strict=False)):
-            right.annotate(
-                f"{shown:.0f} / {shown + held:.0f}",
-                (shown + held, position),
-                textcoords="offset points",
-                xytext=(8, -3),
-                color=MUTED,
-                fontsize=9,
-            )
-        right.set_yticks(positions, modes)
-        right.invert_yaxis()
-        right.margins(x=0.12)
-        _legend_below(right, ncols=2, pad=-0.2)
-    right.set_xlabel("токены безопасного ответа (среднее)", color=MUTED, fontsize=9)
-    _title(right, "Цена для безопасных ответов", f"{safe['trace_id'].nunique()} безопасных трасс")
     figure.tight_layout()
     return figure
 

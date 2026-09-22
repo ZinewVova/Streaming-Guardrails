@@ -65,13 +65,26 @@ def validate_source(frame: pd.DataFrame, *, expected_rows: int | None = 210) -> 
         for onset, response in zip(frame["Unsafe_Start_Index"], frame["Response"], strict=True)
     )
     checks.append(("onset_range", boundary_ok, ""))
-    prefix_ok = boundary_ok and all(
-        prefix == response[:onset]
-        for prefix, response, onset in zip(
-            frame["Safe_Prefix"], frame["Response"], frame["Unsafe_Start_Index"], strict=True
+    if boundary_ok:
+        prefix_matches = [
+            prefix == response[:onset]
+            for prefix, response, onset in zip(
+                frame["Safe_Prefix"],
+                frame["Response"],
+                frame["Unsafe_Start_Index"],
+                strict=True,
+            )
+        ]
+        mismatching_prefixes = prefix_matches.count(False)
+        prefix_ok = mismatching_prefixes == 0
+        prefix_detail = (
+            f"{len(prefix_matches) - mismatching_prefixes} matching, "
+            f"{mismatching_prefixes} mismatching"
         )
-    )
-    checks.append(("safe_prefix_exact", prefix_ok, ""))
+    else:
+        prefix_ok = False
+        prefix_detail = "not evaluated: invalid onset"
+    checks.append(("safe_prefix_exact", prefix_ok, prefix_detail))
     label_onset_ok = boundary_ok and all(
         (label == "safe" and onset == len(response))
         or (label == "unsafe" and onset < len(response))
