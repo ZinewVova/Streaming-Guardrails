@@ -3,7 +3,11 @@ from pathlib import Path
 import pandas as pd
 
 from streamguard_bench.contracts import PromptDecision, ResponseTokenDecision
-from streamguard_bench.experiments import replay_saved_traces, run_experiment
+from streamguard_bench.experiments import (
+    replay_saved_traces,
+    run_experiment,
+    sweep_decision_rules,
+)
 from streamguard_bench.streaming import TokenizedResponse
 
 
@@ -111,3 +115,29 @@ def test_saved_traces_replay_under_another_threshold_without_scoring(tmp_path: P
     assert blocked(0.3) == {"safe": True, "unsafe": True}
     assert blocked(0.3, trigger_count=3) == {"safe": False, "unsafe": False}
     assert guard.scored == scored
+
+
+def test_rule_sweep_reports_one_row_per_rule_from_saved_traces(tmp_path: Path):
+    guard = ScoringGuard()
+    run_experiment(dataset=dataset(), guard=guard, output_dir=tmp_path)
+    scored = guard.scored
+    grid = sweep_decision_rules(
+        dataset=dataset(),
+        output_dir=tmp_path,
+        profile="smoke2",
+        policy="conservative",
+        rules=[
+            {},
+            {"threshold": 0.7},
+            {"threshold": 0.3},
+            {"threshold": 0.3, "trigger_count": 2, "trigger_mode": "consecutive"},
+        ],
+    )
+    assert guard.scored == scored
+    assert grid[["fp", "fn"]].to_dict("records") == [
+        {"fp": 0, "fn": 1},
+        {"fp": 0, "fn": 0},
+        {"fp": 1, "fn": 0},
+        {"fp": 1, "fn": 0},
+    ]
+    assert list(grid["trigger_mode"]) == ["cumulative"] * 3 + ["consecutive"]

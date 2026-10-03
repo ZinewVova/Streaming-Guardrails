@@ -13,6 +13,7 @@ import pandas as pd
 
 from streamguard_bench.contracts import GuardTrace
 from streamguard_bench.data import REPOSITORY
+from streamguard_bench.metrics import compute_response_policy_metrics
 from streamguard_bench.streaming import (
     DEFAULT_MODES,
     DEFAULT_POLICIES,
@@ -200,18 +201,9 @@ def replay_saved_traces(
     """Replay checkpointed traces under another decision rule without scoring them again."""
 
     selected = select_profile_traces(dataset, profile)
-    checkpoint_dir = Path(output_dir) / profile / "checkpoints"
-    traces = {}
-    for trace_id in selected["trace_id"].astype(str):
-        checkpoint = checkpoint_dir / f"{trace_id}.json"
-        if not checkpoint.exists():
-            continue
-        trace = GuardTrace.from_dict(json.loads(checkpoint.read_text()))
-        if threshold is not None:
-            trace = relabel_trace(
-                trace, threshold=threshold, include_controversial=include_controversial
-            )
-        traces[trace_id] = trace
+    traces = _apply_threshold(
+        _load_traces(selected, output_dir, profile), threshold, include_controversial
+    )
     return _replay(
         selected,
         traces,
@@ -223,6 +215,80 @@ def replay_saved_traces(
         trigger_mode,
         trigger_window,
     )
+
+
+def sweep_decision_rules(
+    *,
+    dataset: Any,
+    output_dir: str | Path,
+    profile: str,
+    policy: str,
+    rules: list[dict[str, Any]],
+    mode: str = "token",
+    max_sentence_tokens: int = 128,
+) -> pd.DataFrame:
+    """Summarise saved traces under many stop rules; one row per rule.
+
+    A rule is a dict with any of `threshold`, `include_controversial`, `trigger_count`,
+    `trigger_mode` and `trigger_window`. Without a threshold the stored labels are used.
+    """
+    selected = select_profile_traces(dataset, profile)
+    saved = _load_traces(selected, output_dir, profile)
+    rows = []
+    for rule in rules:
+        traces = _apply_threshold(
+            saved, rule.get("threshold"), rule.get("include_controversial", False)
+        )
+        results = _replay(
+            selected,
+            traces,
+            [],
+            (BufferMode(mode),),
+            (SafetyPolicy(policy),),
+            max_sentence_tokens,
+            rule.get("trigger_count", 1),
+            rule.get("trigger_mode", "cumulative"),
+            rule.get("trigger_window"),
+        )
+        metrics = compute_response_policy_metrics(results).iloc[0]
+        harmful = results[results["response_ground_truth"] == "unsafe"]
+        rows.append(
+            {
+                "threshold": rule.get("threshold"),
+                "trigger_count": rule.get("trigger_count", 1),
+                "trigger_mode": rule.get("trigger_mode", "cumulative"),
+                "trigger_window": rule.get("trigger_window"),
+                "fp": int(metrics["fp"]),
+                "fn": int(metrics["fn"]),
+                "false_positive_rate": metrics["false_positive_rate"],
+                "false_negative_rate": metrics["false_negative_rate"],
+                "leakage_words_mean": harmful["leakage_words"].mean(),
+                "detection_delay_median": harmful["detection_delay_tokens"].median(),
+                "premature_block_rate": harmful["premature_block"].mean(),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _load_traces(selected: pd.DataFrame, output_dir: str | Path, profile: str) -> dict:
+    checkpoint_dir = Path(output_dir) / profile / "checkpoints"
+    traces = {}
+    for trace_id in selected["trace_id"].astype(str):
+        checkpoint = checkpoint_dir / f"{trace_id}.json"
+        if checkpoint.exists():
+            traces[trace_id] = GuardTrace.from_dict(json.loads(checkpoint.read_text()))
+    return traces
+
+
+def _apply_threshold(traces: dict, threshold: float | None, include_controversial: bool) -> dict:
+    if threshold is None:
+        return traces
+    return {
+        trace_id: relabel_trace(
+            trace, threshold=threshold, include_controversial=include_controversial
+        )
+        for trace_id, trace in traces.items()
+    }
 
 
 def _score_trace(guard: Any, row: dict[str, Any]) -> GuardTrace:

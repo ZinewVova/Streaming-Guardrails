@@ -146,3 +146,19 @@ def test_multi_guard_figures_render():
     )
     figures = [plots.plot_error_tradeoff(classification), plots.plot_model_leakage(streaming)]
     assert all(figure.axes for figure in figures)
+
+
+def test_rule_frontier_renders():
+    grid = pd.DataFrame(
+        [
+            {
+                "model": model,
+                "false_positive_rate": fpr,
+                "false_negative_rate": fnr + shift,
+                "default": fpr == 0.4,
+            }
+            for model, shift in (("a", 0.0), ("b", 0.05))
+            for fpr, fnr in ((0.1, 0.5), (0.2, 0.3), (0.3, 0.35), (0.4, 0.1))
+        ]
+    )
+    assert plots.plot_rule_frontier(grid).axes

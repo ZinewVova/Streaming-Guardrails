@@ -585,3 +585,62 @@ def plot_model_leakage(
     )
     figure.tight_layout()
     return figure
+
+
+def plot_rule_frontier(grid: pd.DataFrame) -> Figure:
+    """Every stop rule as a point; the line joins the rules no other rule beats on both axes.
+
+    `grid` needs `model`, both error rates and a boolean `default` marking each guard's
+    own rule, which is drawn as a large outlined marker.
+    """
+    colors = _model_colors(grid["model"].drop_duplicates())
+    figure, axis = _figure(figsize=(7.2, 5.4))
+    _style(axis, grid_axis="both")
+    for model, color in colors.items():
+        points = grid[grid["model"] == model]
+        axis.scatter(
+            points["false_positive_rate"],
+            points["false_negative_rate"],
+            s=14,
+            color=color,
+            alpha=0.3,
+            linewidths=0,
+            zorder=2,
+        )
+        ordered = points.sort_values(["false_positive_rate", "false_negative_rate"])
+        misses = ordered["false_negative_rate"]
+        best = ordered[misses < misses.cummin().shift(1, fill_value=np.inf)]
+        axis.plot(
+            best["false_positive_rate"],
+            best["false_negative_rate"],
+            color=color,
+            linewidth=2,
+            marker="o",
+            markersize=4,
+            zorder=3,
+        )
+        default = points[points["default"]]
+        axis.scatter(
+            default["false_positive_rate"],
+            default["false_negative_rate"],
+            s=150,
+            facecolor=color,
+            edgecolor=INK,
+            linewidths=1.6,
+            marker="*",
+            zorder=4,
+        )
+    axis.set_xlim(left=0)
+    axis.set_ylim(bottom=0)
+    axis.set_xlabel("доля заблокированных безопасных ответов", color=MUTED, fontsize=9)
+    axis.set_ylabel("доля пропущенных вредных ответов", color=MUTED, fontsize=9)
+    handles = _model_handles(colors) + [
+        Line2D(
+            [], [], color=MUTED, marker="*", markersize=12, markeredgecolor=INK, linewidth=0,
+            label="правило по умолчанию",
+        )
+    ]
+    _legend_below(axis, handles, ncols=min(len(handles), 3), pad=-0.16)
+    _title(axis, "Все правила остановки", "линия — лучшие правила; ближе к нулю — лучше")
+    figure.tight_layout()
+    return figure
