@@ -120,6 +120,24 @@ uv run python scripts/validate_singstreambench.py
 
 ## Запуск прогонов
 
+Частые команды собраны в `Makefile`; `make help` печатает их список. Модель выбирается
+именем конфига из `configs/`:
+
+```bash
+make smoke MODEL=scm_0_5b
+```
+
+```bash
+make full MODEL=scm_0_5b
+```
+
+```bash
+make reports MODEL=scm_0_5b PROFILE=full
+```
+
+Без `MODEL` берётся `qwen3guard_baseline`. Ниже те же шаги без `make`.
+
+
 Профиль `smoke2` это проверка работоспособности кода:
 
 ```bash
