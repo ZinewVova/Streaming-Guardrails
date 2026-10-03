@@ -121,12 +121,7 @@ class Qwen3GuardStreamAdapter:
         model_input = self._model_input(_flatten(prompt_ids))
         started = time.perf_counter()
         with self._inference_context():
-            result, self.stream_state = self.model.stream_moderate_from_ids(
-                model_input,
-                role="user",
-                stream_state=None,
-            )
-        parsed = parse_guard_output(result)
+            parsed = self._moderate(model_input, role="user")
         return PromptDecision(
             trace_id=trace_id,
             query_ground_truth=query_ground_truth,
@@ -134,6 +129,7 @@ class Qwen3GuardStreamAdapter:
             risk_categories=parsed["risk_categories"],
             confidence=parsed["confidence"],
             latency_ms=(time.perf_counter() - started) * 1000,
+            **_score_fields(parsed),
         )
 
     def score_token(
@@ -149,14 +145,9 @@ class Qwen3GuardStreamAdapter:
             raise RuntimeError("start(prompt) must be called before score_token")
         started = time.perf_counter()
         with self._inference_context():
-            result, self.stream_state = self.model.stream_moderate_from_ids(
-                self._model_input([token_id]),
-                role="assistant",
-                stream_state=self.stream_state,
-            )
+            parsed = self._moderate(self._model_input([token_id]), role="assistant")
         latency_ms = (time.perf_counter() - started) * 1000
 
-        parsed = parse_guard_output(result)
         return ResponseTokenDecision(
             token_index=token_index,
             token_id=token_id,
@@ -165,7 +156,48 @@ class Qwen3GuardStreamAdapter:
             risk_categories=parsed["risk_categories"],
             confidence=parsed["confidence"],
             latency_ms=latency_ms,
+            **_score_fields(parsed),
         )
+
+    def _moderate(self, model_input: Any, *, role: str) -> dict[str, Any]:
+        """Advance the stream and return the parsed decision for the last token.
+
+        With torch available the logits are read from the model's own stream generator, the
+        same one `stream_moderate_from_ids` drives, so the label is unchanged while the
+        probability of every risk level is kept instead of only the winning one.
+        """
+        if self._torch is None:
+            result, self.stream_state = self.model.stream_moderate_from_ids(
+                model_input, role=role, stream_state=self.stream_state
+            )
+            return parse_guard_output(result)
+
+        token_ids = model_input.to(self.model.device)
+        if self.stream_state is None:
+            self.stream_state = self.model.stream_generate(token_ids)
+            logits = next(self.stream_state)
+        else:
+            logits = self.stream_state.send(token_ids)
+        if role == "user":
+            risk_logits, category_logits = logits[2], logits[3]
+            risk_map, category_map = self.model.query_risk_level_map, self.model.query_category_map
+        else:
+            risk_logits, category_logits = logits[0], logits[1]
+            risk_map = self.model.response_risk_level_map
+            category_map = self.model.response_category_map
+        risk_probs = self._torch.softmax(risk_logits[0, -1].float(), dim=-1)
+        risk_index = int(risk_probs.argmax())
+        parsed = parse_guard_output(
+            {
+                "risk_level": [risk_map[risk_index]],
+                "risk_prob": [float(risk_probs[risk_index])],
+                "category": [category_map[int(category_logits[0, -1].argmax())]],
+            }
+        )
+        parsed["scores"] = {
+            str(risk_map[index]).lower(): float(value) for index, value in enumerate(risk_probs)
+        }
+        return parsed
 
     def close(self) -> None:
         """Close the official generator state, including after failed traces."""
@@ -189,6 +221,11 @@ class Qwen3GuardStreamAdapter:
 
     def __exit__(self, *_: Any) -> None:
         self.close()
+
+
+def _score_fields(parsed: dict[str, Any]) -> dict[str, float | None]:
+    scores = parsed.get("scores", {})
+    return {f"{label}_score": scores.get(label) for label in ("safe", "controversial", "unsafe")}
 
 
 def _last_required(value: Any, field: str) -> Any:

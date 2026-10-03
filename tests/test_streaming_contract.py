@@ -147,3 +147,69 @@ def test_leakage_in_characters_and_words_follows_the_released_text():
 
     without_onset = replay(labels)
     assert without_onset.leakage_words is None
+
+
+def rule(labels, mode, *, trigger_mode, trigger_count, trigger_window=None):
+    result = simulate_intervention(
+        trace=trace(labels),
+        response="x" * len(labels),
+        response_ground_truth="unsafe",
+        unsafe_start_token=1,
+        response_token_count=len(labels),
+        mode=mode,
+        policy="conservative",
+        trigger_count=trigger_count,
+        trigger_mode=trigger_mode,
+        trigger_window=trigger_window,
+    )
+    return result.signal_token, result.intervention_token
+
+
+U, S = "unsafe", "safe"
+
+
+def test_consecutive_rule_needs_an_unbroken_run():
+    labels = [U, S, U, S, U, U, S]
+    assert rule(labels, "token", trigger_mode="cumulative", trigger_count=2) == (3, 3)
+    assert rule(labels, "token", trigger_mode="consecutive", trigger_count=2) == (6, 6)
+    assert rule(labels, "token", trigger_mode="consecutive", trigger_count=3) == (None, None)
+
+
+def test_window_rule_counts_only_recent_tokens():
+    labels = [U, S, S, S, U, S, U]
+    # Flags at 1 and 5 are four tokens apart: outside a window of 3, inside a window of 5.
+    assert rule(labels, "token", trigger_mode="window", trigger_count=2, trigger_window=3) == (7, 7)
+    assert rule(labels, "token", trigger_mode="window", trigger_count=2, trigger_window=5) == (5, 5)
+
+
+def test_buffer_rule_restarts_with_every_release_buffer():
+    labels = [S] * 7 + [U, U] + [S] * 6 + [U]
+    # The two flags sit on both sides of the chunk boundary at token 8.
+    assert rule(labels, "chunk_8", trigger_mode="buffer", trigger_count=2) == (16, 16)
+    assert rule(labels, "chunk_16", trigger_mode="buffer", trigger_count=2) == (9, 16)
+    # A one-token buffer can never hold two flags.
+    assert rule(labels, "token", trigger_mode="buffer", trigger_count=2) == (None, None)
+
+
+def test_window_arguments_are_validated():
+    with pytest.raises(ValueError, match="trigger_window"):
+        rule([U], "token", trigger_mode="window", trigger_count=2, trigger_window=1)
+    with pytest.raises(ValueError, match="trigger_window"):
+        rule([U], "token", trigger_mode="cumulative", trigger_count=1, trigger_window=4)
+
+
+def test_relabel_can_add_the_controversial_probability():
+    base = trace([S, S])
+    decisions = (
+        ResponseTokenDecision(1, 1, 1, S, unsafe_score=0.3, controversial_score=0.3),
+        ResponseTokenDecision(2, 2, 2, S, unsafe_score=0.6, controversial_score=0.1),
+    )
+    scored = GuardTrace(**{**base.__dict__, "decisions": decisions})
+
+    def labels(**kwargs):
+        return [
+            item.risk_label for item in relabel_trace(scored, threshold=0.55, **kwargs).decisions
+        ]
+
+    assert labels() == [S, U]
+    assert labels(include_controversial=True) == [U, U]

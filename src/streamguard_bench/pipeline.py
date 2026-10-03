@@ -68,6 +68,8 @@ def run_or_load(
         max_sentence_tokens=experiment["max_sentence_tokens"],
         dataset_revision=config["dataset"]["revision"],
         trigger_count=experiment.get("trigger_count", 1),
+        trigger_mode=experiment.get("trigger_mode", "cumulative"),
+        trigger_window=experiment.get("trigger_window"),
     )
 
 

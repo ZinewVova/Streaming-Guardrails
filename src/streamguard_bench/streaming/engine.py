@@ -5,11 +5,10 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import replace
-from itertools import accumulate
 
 from streamguard_bench.contracts import GuardTrace, InterventionResult, ResponseTokenDecision
 
-from .data_classes import BufferMode, SafetyPolicy
+from .data_classes import BufferMode, SafetyPolicy, TriggerMode
 
 _TERMINAL = re.compile(r"[.!?。！？]+[\"'»”’)*\]]*$")
 
@@ -26,27 +25,35 @@ def simulate_intervention(
     max_sentence_tokens: int = 128,
     trigger_count: int = 1,
     unsafe_start_character: int | None = None,
+    trigger_mode: TriggerMode | str = TriggerMode.CUMULATIVE,
+    trigger_window: int | None = None,
 ) -> InterventionResult:
     if trigger_count < 1:
         raise ValueError("trigger_count must be at least 1")
+    selected_trigger = TriggerMode(trigger_mode)
+    if selected_trigger is TriggerMode.WINDOW:
+        if trigger_window is None or trigger_window < trigger_count:
+            raise ValueError("trigger_window must be at least trigger_count in window mode")
+    elif trigger_window is not None:
+        raise ValueError("trigger_window is only used in window mode")
     selected_mode, selected_policy = BufferMode(mode), SafetyPolicy(policy)
     decisions = trace.decisions
     blocking = selected_policy.blocking_labels
     checkpoints = _buffer_checkpoints(decisions, response, selected_mode, max_sentence_tokens)
-    # Blocking tokens are counted cumulatively; they need not be consecutive.
-    counts = list(accumulate(item.risk_label in blocking for item in decisions))
+    fired = _fired(
+        [item.risk_label in blocking for item in decisions],
+        checkpoints,
+        selected_trigger,
+        trigger_count,
+        trigger_window,
+    )
     signal = next(
-        (
-            item.token_index
-            for item, count in zip(decisions, counts, strict=True)
-            if count >= trigger_count
-        ),
-        None,
+        (item.token_index for item, hit in zip(decisions, fired, strict=True) if hit), None
     )
     released, intervention, checks = 0, None, 0
-    for _, end in checkpoints:
+    for start, end in checkpoints:
         checks += 1
-        if counts[end - 1] >= trigger_count:
+        if any(fired[start:end]):
             intervention = end
             break
         released = end
@@ -95,6 +102,8 @@ def simulate_intervention(
         trigger_count=trigger_count,
         leakage_characters=leaked_characters,
         leakage_words=leaked_words,
+        trigger_mode=selected_trigger.value,
+        trigger_window=trigger_window,
     )
 
 
@@ -110,6 +119,8 @@ def simulate_all(
     max_sentence_tokens: int = 128,
     trigger_counts: Iterable[int] = (1,),
     unsafe_start_character: int | None = None,
+    trigger_mode: TriggerMode | str = TriggerMode.CUMULATIVE,
+    trigger_window: int | None = None,
 ) -> list[InterventionResult]:
     counts = tuple(trigger_counts)
     return [
@@ -124,6 +135,8 @@ def simulate_all(
             max_sentence_tokens=max_sentence_tokens,
             trigger_count=trigger_count,
             unsafe_start_character=unsafe_start_character,
+            trigger_mode=trigger_mode,
+            trigger_window=trigger_window,
         )
         for mode in modes
         for policy in policies
@@ -131,18 +144,61 @@ def simulate_all(
     ]
 
 
-def relabel_trace(trace: GuardTrace, *, threshold: float) -> GuardTrace:
-    """Rebuild binary token labels from stored scores without scoring the trace again."""
+def relabel_trace(
+    trace: GuardTrace, *, threshold: float, include_controversial: bool = False
+) -> GuardTrace:
+    """Rebuild binary token labels from stored scores without scoring the trace again.
 
-    if any(item.unsafe_score is None for item in trace.decisions):
-        raise ValueError("Trace has no unsafe_score; its labels cannot be re-thresholded")
+    A token becomes `unsafe` when its unsafe probability reaches the threshold. With
+    `include_controversial` the controversial probability is added first, which is the
+    thresholded counterpart of the strict policy.
+    """
+
+    def score(item: ResponseTokenDecision) -> float:
+        if item.unsafe_score is None:
+            raise ValueError("Trace has no unsafe_score; its labels cannot be re-thresholded")
+        if not include_controversial:
+            return item.unsafe_score
+        return item.unsafe_score + (item.controversial_score or 0.0)
+
     return replace(
         trace,
         decisions=tuple(
-            replace(item, risk_label="unsafe" if item.unsafe_score >= threshold else "safe")
+            replace(item, risk_label="unsafe" if score(item) >= threshold else "safe")
             for item in trace.decisions
         ),
     )
+
+
+def _fired(
+    flags: Sequence[bool],
+    checkpoints: Sequence[tuple[int, int]],
+    mode: TriggerMode,
+    count: int,
+    window: int | None,
+) -> list[bool]:
+    """For every token, whether the stop rule is satisfied at that token."""
+    fired = [False] * len(flags)
+    if mode is TriggerMode.BUFFER:
+        # The count restarts with every release buffer, so the rule depends on the mode.
+        for start, end in checkpoints:
+            seen = 0
+            for index in range(start, end):
+                seen += flags[index]
+                fired[index] = seen >= count
+        return fired
+    seen = 0
+    for index, flag in enumerate(flags):
+        if mode is TriggerMode.CUMULATIVE:
+            seen += flag
+        elif mode is TriggerMode.CONSECUTIVE:
+            seen = seen + 1 if flag else 0
+        else:
+            seen += flag
+            if index >= window:
+                seen -= flags[index - window]
+        fired[index] = seen >= count
+    return fired
 
 
 def _buffer_checkpoints(

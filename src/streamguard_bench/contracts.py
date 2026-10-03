@@ -29,6 +29,9 @@ class PromptDecision:
     confidence: float | None
     latency_ms: float
     error: str | None = None
+    safe_score: float | None = None
+    controversial_score: float | None = None
+    unsafe_score: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -43,7 +46,11 @@ class ResponseTokenDecision:
     risk_categories: tuple[str, ...] = ()
     confidence: float | None = None
     latency_ms: float = 0.0
+    # Class probabilities, when the guard exposes them. A guard without a
+    # controversial class leaves that score empty.
     unsafe_score: float | None = None
+    safe_score: float | None = None
+    controversial_score: float | None = None
 
     def __post_init__(self) -> None:
         normalized = self.risk_label.lower()
@@ -104,6 +111,8 @@ class InterventionResult:
     trigger_count: int = 1
     leakage_characters: int | None = None
     leakage_words: int | None = None
+    trigger_mode: str = "cumulative"
+    trigger_window: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -76,6 +76,8 @@ def run_experiment(
     max_sentence_tokens: int = 128,
     dataset_revision: str | None = None,
     trigger_count: int = 1,
+    trigger_mode: str = "cumulative",
+    trigger_window: int | None = None,
 ) -> ExperimentRun:
     selected = select_profile_traces(dataset, profile)
     selected_modes = tuple(BufferMode(item) for item in modes)
@@ -94,6 +96,8 @@ def run_experiment(
         max_sentence_tokens,
         dataset_revision,
         trigger_count,
+        trigger_mode,
+        trigger_window,
     )
     _validate_or_write(run_dir / "run_metadata.json", metadata, resume)
     _write_json(run_dir / "selected_trace_ids.json", list(selected_ids))
@@ -148,6 +152,8 @@ def run_experiment(
         selected_policies,
         max_sentence_tokens,
         trigger_count,
+        trigger_mode,
+        trigger_window,
     )
     error_frame = pd.DataFrame(errors, columns=["trace_id", "error_type", "error"])
     prompt_frame.to_parquet(run_dir / "prompt_decisions.parquet", index=False)
@@ -187,6 +193,9 @@ def replay_saved_traces(
     trigger_count: int = 1,
     threshold: float | None = None,
     max_sentence_tokens: int = 128,
+    trigger_mode: str = "cumulative",
+    trigger_window: int | None = None,
+    include_controversial: bool = False,
 ) -> pd.DataFrame:
     """Replay checkpointed traces under another decision rule without scoring them again."""
 
@@ -198,7 +207,11 @@ def replay_saved_traces(
         if not checkpoint.exists():
             continue
         trace = GuardTrace.from_dict(json.loads(checkpoint.read_text()))
-        traces[trace_id] = trace if threshold is None else relabel_trace(trace, threshold=threshold)
+        if threshold is not None:
+            trace = relabel_trace(
+                trace, threshold=threshold, include_controversial=include_controversial
+            )
+        traces[trace_id] = trace
     return _replay(
         selected,
         traces,
@@ -207,6 +220,8 @@ def replay_saved_traces(
         tuple(SafetyPolicy(item) for item in policies),
         max_sentence_tokens,
         trigger_count,
+        trigger_mode,
+        trigger_window,
     )
 
 
@@ -239,7 +254,17 @@ def _score_trace(guard: Any, row: dict[str, Any]) -> GuardTrace:
     )
 
 
-def _replay(selected, traces, errors, modes, policies, max_sentence_tokens, trigger_count=1):
+def _replay(
+    selected,
+    traces,
+    errors,
+    modes,
+    policies,
+    max_sentence_tokens,
+    trigger_count=1,
+    trigger_mode="cumulative",
+    trigger_window=None,
+):
     records = []
     by_id = {str(row["trace_id"]): row for row in selected.to_dict(orient="records")}
     for trace_id, trace in traces.items():
@@ -256,6 +281,8 @@ def _replay(selected, traces, errors, modes, policies, max_sentence_tokens, trig
                 policies=policies,
                 max_sentence_tokens=max_sentence_tokens,
                 trigger_counts=(trigger_count,),
+                trigger_mode=trigger_mode,
+                trigger_window=trigger_window,
                 unsafe_start_character=int(row["unsafe_start_character"]),
             )
         )
@@ -285,6 +312,8 @@ def _replay(selected, traces, errors, modes, policies, max_sentence_tokens, trig
                 "trigger_count": trigger_count,
                 "leakage_characters": None,
                 "leakage_words": None,
+                "trigger_mode": trigger_mode,
+                "trigger_window": trigger_window,
             }
             for mode in modes
             for policy in policies
@@ -317,7 +346,17 @@ def _validate_columns(frame: pd.DataFrame) -> None:
 
 
 def _metadata(
-    guard, profile, ids, modes, policies, seed, max_sentence_tokens, dataset_revision, trigger_count
+    guard,
+    profile,
+    ids,
+    modes,
+    policies,
+    seed,
+    max_sentence_tokens,
+    dataset_revision,
+    trigger_count,
+    trigger_mode="cumulative",
+    trigger_window=None,
 ):
     value = {
         "schema_version": SCHEMA_VERSION,
@@ -341,6 +380,10 @@ def _metadata(
     # Recorded only when set, so runs made before these options stay resumable.
     if trigger_count != 1:
         value["trigger_count"] = trigger_count
+    if trigger_mode != "cumulative":
+        value["trigger_mode"] = trigger_mode
+    if trigger_window is not None:
+        value["trigger_window"] = trigger_window
     if getattr(guard, "threshold", None) is not None:
         value["threshold"] = guard.threshold
     value["configuration_sha256"] = hashlib.sha256(

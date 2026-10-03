@@ -115,6 +115,7 @@ class SCMAdapter:
             confidence=score,
             latency_ms=latency_ms,
             unsafe_score=score,
+            safe_score=1.0 - score,
         )
 
     def close(self) -> None:

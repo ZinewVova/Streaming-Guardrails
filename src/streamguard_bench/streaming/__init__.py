@@ -10,6 +10,7 @@ from .data_classes import (
     SafetyPolicy,
     TokenDecision,
     TokenizedResponse,
+    TriggerMode,
 )
 from .engine import relabel_trace, simulate_all, simulate_intervention
 
@@ -23,6 +24,7 @@ __all__ = [
     "ResponseTokenDecision",
     "TokenDecision",
     "TokenizedResponse",
+    "TriggerMode",
     "relabel_trace",
     "simulate_all",
     "simulate_intervention",

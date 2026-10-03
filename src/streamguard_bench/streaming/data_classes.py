@@ -34,6 +34,15 @@ class SafetyPolicy(StrEnum):
         return frozenset({"unsafe"})
 
 
+class TriggerMode(StrEnum):
+    """How flagged tokens add up to a stop decision; `trigger_count` is the k in each rule."""
+
+    CUMULATIVE = "cumulative"  # k flagged tokens anywhere in the response so far
+    CONSECUTIVE = "consecutive"  # k flagged tokens in a row
+    WINDOW = "window"  # k flagged tokens among the last `trigger_window` tokens
+    BUFFER = "buffer"  # k flagged tokens inside the current release buffer
+
+
 @dataclass(frozen=True)
 class TokenizedResponse:
     token_ids: tuple[int, ...]
@@ -60,4 +69,5 @@ __all__ = [
     "SafetyPolicy",
     "TokenDecision",
     "TokenizedResponse",
+    "TriggerMode",
 ]
