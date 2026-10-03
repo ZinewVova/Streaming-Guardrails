@@ -245,8 +245,16 @@ def plot_trace_timeline(
     handles = [
         Patch(facecolor=FILL, label="выпущено пользователю"),
         Patch(facecolor=BUFFERED, label="удержано в буфере"),
-        Line2D([], [], color=ACCENT, marker="|", linewidth=0, markersize=12,
-               markeredgewidth=2.5, label="решение о блокировке"),
+        Line2D(
+            [],
+            [],
+            color=ACCENT,
+            marker="|",
+            linewidth=0,
+            markersize=12,
+            markeredgewidth=2.5,
+            label="решение о блокировке",
+        ),
     ]
     if len(signal):
         handles.append(Line2D([], [], color=LABEL_COLORS["unsafe"], label="первый сигнал"))
@@ -266,44 +274,87 @@ def plot_trace_timeline(
     return figure
 
 
-def plot_signal_offset(results: pd.DataFrame, *, policy: str, bins: int = 20) -> Figure:
-    """Distribution of the first blocking signal relative to the annotated onset."""
+def plot_signal_offset(
+    results: pd.DataFrame, *, policy: str, early_bin: int = 25, late_bin: int = 10
+) -> Figure:
+    """When the stop rule fired relative to the annotated onset.
+
+    Early and late signals get separate panels with their own bin width, because early
+    signals spread over hundreds of tokens while delays stay within tens. Traces where the
+    rule never fired have no offset and are shown as one separate bar.
+    """
     rows = _valid(results)
     rows = rows[(rows["policy"] == policy) & (rows["response_ground_truth"] == "unsafe")]
     rows = rows.drop_duplicates("trace_id")
     offsets = rows["signal_offset_tokens"].dropna().to_numpy(float)
     misses = int(rows["signal_token"].isna().sum())
-    figure, axis = _figure(figsize=(9, 3.6))
-    _style(axis)
-    if len(offsets):
-        edges = np.histogram_bin_edges(offsets, bins=min(bins, max(1, len(np.unique(offsets)))))
-        counts, edges = np.histogram(offsets, bins=edges)
-        centers = (edges[:-1] + edges[1:]) / 2
-        widths = np.diff(edges) * 0.92
-        colors = [POLICY_COLORS["conservative"] if center < 0 else ACCENT for center in centers]
-        axis.bar(centers, counts, width=widths, color=colors, zorder=2)
-    axis.axvline(0, color=INK, linewidth=1.4, zorder=3)
-    axis.set_xlabel("signal_token − unsafe_start_token (токены)", color=MUTED, fontsize=9)
-    axis.set_ylabel("трасс", color=MUTED, fontsize=9)
-    _legend_below(
-        axis,
-        [
-            Patch(facecolor=POLICY_COLORS["conservative"], label="сигнал до onset"),
-            Patch(facecolor=ACCENT, label="сигнал на onset или позже"),
+    early, late = -offsets[offsets < 0], offsets[offsets >= 0]
+    early_color, miss_color = POLICY_COLORS["conservative"], LABEL_COLORS["unsafe"]
+
+    figure, (left, right, missed) = _figure(
+        1, 3, figsize=(10, 3.9), sharey=True, gridspec_kw={"width_ratios": [3, 3, 0.7]}
+    )
+    for axis in (left, right, missed):
+        _style(axis)
+
+    def bars(axis, values, width, color):
+        if not len(values):
+            return 0
+        edges = np.arange(0, values.max() + width, width)
+        if len(edges) < 2:
+            edges = np.array([0, width])
+        counts, edges = np.histogram(values, bins=edges)
+        axis.bar(edges[:-1], counts, width=width * 0.92, align="edge", color=color, zorder=2)
+        return counts.max()
+
+    tallest = max(bars(left, early, early_bin, early_color), bars(right, late, late_bin, ACCENT))
+    missed.bar(0, misses, width=0.6, color=miss_color, zorder=2)
+    missed.annotate(
+        str(misses),
+        (0, misses),
+        textcoords="offset points",
+        xytext=(0, 4),
+        ha="center",
+        color=INK,
+        fontsize=10,
+    )
+    left.set_ylim(0, max(tallest, misses, 1) * 1.15)
+
+    left.invert_xaxis()
+    left.set_xlim(left=max(early.max(), early_bin) + early_bin if len(early) else early_bin)
+    left.set_xlim(right=0)
+    right.set_xlim(left=0)
+    right.axvline(0, color=INK, linewidth=1.4, zorder=3)
+    missed.set_xlim(-0.6, 0.6)
+    missed.set_xticks([0], ["без сигнала"])
+    left.set_ylabel("трасс", color=MUTED, fontsize=9)
+    left.set_xlabel(f"токенов до onset (столбец = {early_bin})", color=MUTED, fontsize=9)
+    right.set_xlabel(f"токенов после onset (столбец = {late_bin})", color=MUTED, fontsize=9)
+
+    exact = int((offsets == 0).sum())
+    # The title belongs to the whole figure: on one panel it would squeeze the others.
+    figure.text(0.015, 0.95, "Смещение срабатывания относительно onset", color=INK, fontsize=12)
+    figure.text(
+        0.015,
+        0.885,
+        f"policy: {policy} · до onset {len(early)} · точно в onset {exact}"
+        f" · позже {len(late) - exact} · без сигнала {misses}",
+        color=MUTED,
+        fontsize=9,
+    )
+    figure.tight_layout(rect=(0, 0.08, 1, 0.86))
+    figure.legend(
+        handles=[
+            Patch(facecolor=early_color, label="сработало до onset"),
+            Patch(facecolor=ACCENT, label="сработало на onset или позже"),
+            Patch(facecolor=miss_color, label="не сработало"),
             Line2D([], [], color=INK, label="истинный onset"),
         ],
-        ncols=3,
-        pad=-0.28,
+        frameon=False,
+        fontsize=9,
+        loc="lower center",
+        ncols=4,
     )
-    premature = int((offsets < 0).sum())
-    delayed = int((offsets >= 0).sum())
-    _title(
-        axis,
-        "Смещение первого сигнала относительно onset",
-        f"policy: {policy} · преждевременно {premature} · вовремя или позже {delayed}"
-        f" · без сигнала {misses}",
-    )
-    figure.tight_layout()
     return figure
 
 
