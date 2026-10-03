@@ -43,6 +43,7 @@ class ResponseTokenDecision:
     risk_categories: tuple[str, ...] = ()
     confidence: float | None = None
     latency_ms: float = 0.0
+    unsafe_score: float | None = None
 
     def __post_init__(self) -> None:
         normalized = self.risk_label.lower()
@@ -100,6 +101,7 @@ class InterventionResult:
     checks: int
     guard_time_ms: float
     error: str | None = None
+    trigger_count: int = 1
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

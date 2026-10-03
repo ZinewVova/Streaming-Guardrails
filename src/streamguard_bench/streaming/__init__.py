@@ -11,7 +11,7 @@ from .data_classes import (
     TokenDecision,
     TokenizedResponse,
 )
-from .engine import simulate_all, simulate_intervention
+from .engine import relabel_trace, simulate_all, simulate_intervention
 
 __all__ = [
     "DEFAULT_MODES",
@@ -23,6 +23,7 @@ __all__ = [
     "ResponseTokenDecision",
     "TokenDecision",
     "TokenizedResponse",
+    "relabel_trace",
     "simulate_all",
     "simulate_intervention",
 ]

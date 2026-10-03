@@ -239,6 +239,7 @@ def _replay(selected, traces, errors, modes, policies, max_sentence_tokens):
                 "checks": 0,
                 "guard_time_ms": 0.0,
                 "error": failure["error"],
+                "trigger_count": 1,
             }
             for mode in modes
             for policy in policies

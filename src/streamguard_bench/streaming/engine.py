@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Sequence
+from dataclasses import replace
+from itertools import accumulate
 
 from streamguard_bench.contracts import GuardTrace, InterventionResult, ResponseTokenDecision
 
@@ -22,16 +24,28 @@ def simulate_intervention(
     mode: BufferMode | str,
     policy: SafetyPolicy | str,
     max_sentence_tokens: int = 128,
+    trigger_count: int = 1,
 ) -> InterventionResult:
+    if trigger_count < 1:
+        raise ValueError("trigger_count must be at least 1")
     selected_mode, selected_policy = BufferMode(mode), SafetyPolicy(policy)
     decisions = trace.decisions
     blocking = selected_policy.blocking_labels
     checkpoints = _buffer_checkpoints(decisions, response, selected_mode, max_sentence_tokens)
-    signal = next((item.token_index for item in decisions if item.risk_label in blocking), None)
+    # Blocking tokens are counted cumulatively; they need not be consecutive.
+    counts = list(accumulate(item.risk_label in blocking for item in decisions))
+    signal = next(
+        (
+            item.token_index
+            for item, count in zip(decisions, counts, strict=True)
+            if count >= trigger_count
+        ),
+        None,
+    )
     released, intervention, checks = 0, None, 0
-    for start, end in checkpoints:
+    for _, end in checkpoints:
         checks += 1
-        if any(item.risk_label in blocking for item in decisions[start:end]):
+        if counts[end - 1] >= trigger_count:
             intervention = end
             break
         released = end
@@ -69,6 +83,7 @@ def simulate_intervention(
         post_signal_buffer_delay_tokens=buffer_delay,
         checks=checks,
         guard_time_ms=guard_time,
+        trigger_count=trigger_count,
     )
 
 
@@ -82,7 +97,9 @@ def simulate_all(
     modes: Iterable[BufferMode | str],
     policies: Iterable[SafetyPolicy | str],
     max_sentence_tokens: int = 128,
+    trigger_counts: Iterable[int] = (1,),
 ) -> list[InterventionResult]:
+    counts = tuple(trigger_counts)
     return [
         simulate_intervention(
             trace=trace,
@@ -93,10 +110,26 @@ def simulate_all(
             mode=mode,
             policy=policy,
             max_sentence_tokens=max_sentence_tokens,
+            trigger_count=trigger_count,
         )
         for mode in modes
         for policy in policies
+        for trigger_count in counts
     ]
+
+
+def relabel_trace(trace: GuardTrace, *, threshold: float) -> GuardTrace:
+    """Rebuild binary token labels from stored scores without scoring the trace again."""
+
+    if any(item.unsafe_score is None for item in trace.decisions):
+        raise ValueError("Trace has no unsafe_score; its labels cannot be re-thresholded")
+    return replace(
+        trace,
+        decisions=tuple(
+            replace(item, risk_label="unsafe" if item.unsafe_score >= threshold else "safe")
+            for item in trace.decisions
+        ),
+    )
 
 
 def _buffer_checkpoints(
