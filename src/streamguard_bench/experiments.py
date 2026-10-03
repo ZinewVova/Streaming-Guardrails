@@ -18,6 +18,7 @@ from streamguard_bench.streaming import (
     DEFAULT_POLICIES,
     BufferMode,
     SafetyPolicy,
+    relabel_trace,
     simulate_all,
 )
 
@@ -74,6 +75,7 @@ def run_experiment(
     seed: int = 42,
     max_sentence_tokens: int = 128,
     dataset_revision: str | None = None,
+    trigger_count: int = 1,
 ) -> ExperimentRun:
     selected = select_profile_traces(dataset, profile)
     selected_modes = tuple(BufferMode(item) for item in modes)
@@ -91,6 +93,7 @@ def run_experiment(
         seed,
         max_sentence_tokens,
         dataset_revision,
+        trigger_count,
     )
     _validate_or_write(run_dir / "run_metadata.json", metadata, resume)
     _write_json(run_dir / "selected_trace_ids.json", list(selected_ids))
@@ -144,6 +147,7 @@ def run_experiment(
         selected_modes,
         selected_policies,
         max_sentence_tokens,
+        trigger_count,
     )
     error_frame = pd.DataFrame(errors, columns=["trace_id", "error_type", "error"])
     prompt_frame.to_parquet(run_dir / "prompt_decisions.parquet", index=False)
@@ -173,8 +177,45 @@ def load_experiment_run(
     )
 
 
+def replay_saved_traces(
+    *,
+    dataset: Any,
+    output_dir: str | Path,
+    profile: str,
+    modes: tuple[str, ...] | list[str] = tuple(item.value for item in DEFAULT_MODES),
+    policies: tuple[str, ...] | list[str] = tuple(item.value for item in DEFAULT_POLICIES),
+    trigger_count: int = 1,
+    threshold: float | None = None,
+    max_sentence_tokens: int = 128,
+) -> pd.DataFrame:
+    """Replay checkpointed traces under another decision rule without scoring them again."""
+
+    selected = select_profile_traces(dataset, profile)
+    checkpoint_dir = Path(output_dir) / profile / "checkpoints"
+    traces = {}
+    for trace_id in selected["trace_id"].astype(str):
+        checkpoint = checkpoint_dir / f"{trace_id}.json"
+        if not checkpoint.exists():
+            continue
+        trace = GuardTrace.from_dict(json.loads(checkpoint.read_text()))
+        traces[trace_id] = trace if threshold is None else relabel_trace(trace, threshold=threshold)
+    return _replay(
+        selected,
+        traces,
+        [],
+        tuple(BufferMode(item) for item in modes),
+        tuple(SafetyPolicy(item) for item in policies),
+        max_sentence_tokens,
+        trigger_count,
+    )
+
+
 def _score_trace(guard: Any, row: dict[str, Any]) -> GuardTrace:
     tokenized = guard.tokenize_response(str(row["response"]))
+    if len(tokenized.token_ids) != int(row["response_token_count"]):
+        # unsafe_start_token was computed with the dataset tokenizer; a guard that
+        # tokenizes differently would be judged against the wrong onset.
+        raise ValueError("Guard tokenization differs from the prepared dataset")
     started = time.perf_counter()
     prompt = guard.start(
         str(row["query"]), trace_id=str(row["trace_id"]), query_ground_truth=str(row["query_label"])
@@ -198,7 +239,7 @@ def _score_trace(guard: Any, row: dict[str, Any]) -> GuardTrace:
     )
 
 
-def _replay(selected, traces, errors, modes, policies, max_sentence_tokens):
+def _replay(selected, traces, errors, modes, policies, max_sentence_tokens, trigger_count=1):
     records = []
     by_id = {str(row["trace_id"]): row for row in selected.to_dict(orient="records")}
     for trace_id, trace in traces.items():
@@ -214,6 +255,7 @@ def _replay(selected, traces, errors, modes, policies, max_sentence_tokens):
                 modes=modes,
                 policies=policies,
                 max_sentence_tokens=max_sentence_tokens,
+                trigger_counts=(trigger_count,),
             )
         )
     for failure in errors:
@@ -239,7 +281,7 @@ def _replay(selected, traces, errors, modes, policies, max_sentence_tokens):
                 "checks": 0,
                 "guard_time_ms": 0.0,
                 "error": failure["error"],
-                "trigger_count": 1,
+                "trigger_count": trigger_count,
             }
             for mode in modes
             for policy in policies
@@ -271,7 +313,9 @@ def _validate_columns(frame: pd.DataFrame) -> None:
         raise ValueError(f"Dataset is missing required columns: {missing}")
 
 
-def _metadata(guard, profile, ids, modes, policies, seed, max_sentence_tokens, dataset_revision):
+def _metadata(
+    guard, profile, ids, modes, policies, seed, max_sentence_tokens, dataset_revision, trigger_count
+):
     value = {
         "schema_version": SCHEMA_VERSION,
         "dataset_repository": REPOSITORY,
@@ -291,6 +335,11 @@ def _metadata(guard, profile, ids, modes, policies, seed, max_sentence_tokens, d
         "seed": seed,
         "max_sentence_tokens": max_sentence_tokens,
     }
+    # Recorded only when set, so runs made before these options stay resumable.
+    if trigger_count != 1:
+        value["trigger_count"] = trigger_count
+    if getattr(guard, "threshold", None) is not None:
+        value["threshold"] = guard.threshold
     value["configuration_sha256"] = hashlib.sha256(
         json.dumps(value, sort_keys=True).encode()
     ).hexdigest()

@@ -66,17 +66,25 @@ def run_or_load(
         seed=experiment["seed"],
         max_sentence_tokens=experiment["max_sentence_tokens"],
         dataset_revision=config["dataset"]["revision"],
+        trigger_count=experiment.get("trigger_count", 1),
     )
 
 
 def build_guard(config: dict[str, Any]) -> Any:
     """Instantiate the guard named by the configuration; needs the `models` extra."""
-    from streamguard_bench.guards import Qwen3GuardStreamAdapter
-
     model = config["model"]
-    return Qwen3GuardStreamAdapter(
-        model["repository"],
-        revision=model["revision"],
-        tokenizer_revision=model["tokenizer_revision"],
-        device=config["runtime"].get("device"),
-    )
+    adapter = model.get("adapter", "qwen3guard_stream")
+    common = {
+        "revision": model["revision"],
+        "tokenizer_revision": model["tokenizer_revision"],
+        "device": config["runtime"].get("device"),
+    }
+    if adapter == "qwen3guard_stream":
+        from streamguard_bench.guards import Qwen3GuardStreamAdapter
+
+        return Qwen3GuardStreamAdapter(model["repository"], **common)
+    if adapter == "scm":
+        from streamguard_bench.guards import SCMAdapter
+
+        return SCMAdapter(model["repository"], threshold=model["threshold"], **common)
+    raise ValueError(f"Unknown guard adapter: {adapter}")

@@ -113,3 +113,45 @@ def test_repository_configuration_matches_the_pipeline_contract():
     assert set(config["experiment"]["policies"]) == {"strict", "conservative"}
     assert config["experiment"]["output_dir"] == "data/interim/qwen3guard"
     assert set(config["experiment"]["modes"]) >= {"token", "full_buffered"}
+
+
+def test_scm_configuration_selects_the_scm_adapter_and_harm_at_k_rule():
+    config = load_config("configs/scm_0_5b.yaml")
+    assert config["model"]["adapter"] == "scm"
+    assert 0 < config["model"]["threshold"] < 1
+    assert config["experiment"]["trigger_count"] >= 1
+    assert config["experiment"]["output_dir"] != load_config()["experiment"]["output_dir"]
+
+
+def test_unknown_adapter_is_rejected():
+    from streamguard_bench.pipeline import build_guard
+
+    config = {
+        "model": {"adapter": "nope", "repository": "x", "revision": "r", "tokenizer_revision": "r"},
+        "runtime": {"device": None},
+    }
+    with pytest.raises(ValueError, match="Unknown guard adapter"):
+        build_guard(config)
+
+
+def test_trigger_count_reaches_the_replay_and_changes_the_run_identity(tmp_path: Path):
+    config = _project(tmp_path)
+    config["experiment"]["trigger_count"] = 2
+    run = run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard())
+    assert set(run.intervention_results["trigger_count"]) == {2}
+    # One flagged token is not enough for k = 2, so nothing is blocked.
+    assert not run.intervention_results["blocked"].any()
+
+    config["experiment"]["trigger_count"] = 1
+    with pytest.raises(ValueError, match="different configuration"):
+        run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard(), force=True)
+
+
+def test_tokenization_mismatch_is_reported_as_a_trace_error(tmp_path: Path):
+    config = _project(tmp_path)
+    frame = pd.read_parquet(tmp_path / "dataset.parquet")
+    frame.loc[frame["trace_id"] == "safe", "response_token_count"] = 99
+    frame.to_parquet(tmp_path / "dataset.parquet", index=False)
+    run = run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard())
+    assert list(run.errors["trace_id"]) == ["safe"]
+    assert "tokenization" in run.errors["error"].iloc[0]

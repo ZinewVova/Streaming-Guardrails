@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 
 from streamguard_bench.contracts import PromptDecision, ResponseTokenDecision
-from streamguard_bench.experiments import run_experiment
+from streamguard_bench.experiments import replay_saved_traces, run_experiment
 from streamguard_bench.streaming import TokenizedResponse
 
 
@@ -79,3 +79,35 @@ def test_old_checkpoint_schema_is_rejected():
         assert "obsolete" in str(error)
     else:
         raise AssertionError("old checkpoint must be rejected")
+
+
+class ScoringGuard(FakeGuard):
+    def score_token(self, *, token_id, token_index, end_character):
+        score = 0.8 if chr(token_id) == "!" else 0.4
+        return ResponseTokenDecision(
+            token_index, token_id, end_character, "safe", unsafe_score=score
+        )
+
+
+def test_saved_traces_replay_under_another_threshold_without_scoring(tmp_path: Path):
+    guard = ScoringGuard()
+    run = run_experiment(dataset=dataset(), guard=guard, output_dir=tmp_path)
+    assert not run.intervention_results["blocked"].any()
+    scored = guard.scored
+
+    def blocked(threshold, trigger_count=1):
+        frame = replay_saved_traces(
+            dataset=dataset(),
+            output_dir=tmp_path,
+            profile="smoke2",
+            modes=["token"],
+            policies=["conservative"],
+            threshold=threshold,
+            trigger_count=trigger_count,
+        )
+        return frame.set_index("trace_id")["blocked"].to_dict()
+
+    assert blocked(0.7) == {"safe": False, "unsafe": True}
+    assert blocked(0.3) == {"safe": True, "unsafe": True}
+    assert blocked(0.3, trigger_count=3) == {"safe": False, "unsafe": False}
+    assert guard.scored == scored
