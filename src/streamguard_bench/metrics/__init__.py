@@ -4,6 +4,7 @@ from .streaming import (
     compute_response_policy_metrics,
     compute_streaming_metrics,
     paired_mode_differences,
+    paired_run_differences,
     wilson_interval,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "compute_response_policy_metrics",
     "compute_streaming_metrics",
     "paired_mode_differences",
+    "paired_run_differences",
     "wilson_interval",
 ]

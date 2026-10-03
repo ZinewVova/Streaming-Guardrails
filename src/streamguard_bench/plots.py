@@ -173,6 +173,7 @@ def plot_trace_timeline(
     trace_id: str,
     policy: str,
     onset_token: int | None = None,
+    threshold: float | None = None,
 ) -> Figure:
     """Per-token guard labels above, and where each buffer mode stops the stream below."""
     tokens = token_decisions[token_decisions["trace_id"] == trace_id].sort_values("token_index")
@@ -196,7 +197,10 @@ def plot_trace_timeline(
             zorder=3,
         )
     top.set_ylim(0, 1.08)
-    top.set_ylabel("confidence", color=MUTED, fontsize=9)
+    score_label = "confidence" if threshold is None else "unsafe score"
+    top.set_ylabel(score_label, color=MUTED, fontsize=9)
+    if threshold is not None:
+        top.axhline(threshold, color=MUTED, linewidth=1, linestyle=(0, (2, 2)), zorder=2)
     for position, mode in enumerate(modes):
         row = rows[rows["mode"] == mode].iloc[0]
         released = float(row["released_tokens"])
@@ -386,6 +390,62 @@ def plot_paired_differences(paired: pd.DataFrame, *, reference_mode: str = "toke
         axis,
         f"Парное сравнение режимов с {reference_mode}",
         "справа от нуля — режим течёт сильнее эталона",
+    )
+    figure.tight_layout()
+    return figure
+
+
+def plot_decision_rule_grid(
+    grid: pd.DataFrame, *, value: str, title: str, subtitle: str | None = None, percent: bool = True
+) -> Figure:
+    """One metric over the Harm@k rule: thresholds in rows, trigger counts in columns."""
+    table = grid.pivot(index="threshold", columns="trigger_count", values=value).sort_index()
+    figure, axis = _figure(figsize=(0.72 * len(table.columns) + 2.4, 0.55 * len(table) + 1.9))
+    matrix = table.to_numpy(float)
+    low, high = np.nanmin(matrix), np.nanmax(matrix)
+    axis.imshow(matrix, cmap=SEQUENTIAL, aspect="auto", vmin=low, vmax=high)
+    for (line, column), cell in np.ndenumerate(matrix):
+        axis.text(
+            column,
+            line,
+            f"{cell:.0%}" if percent else f"{cell:.1f}",
+            ha="center",
+            va="center",
+            fontsize=9,
+            color="#ffffff" if cell > (low + high) / 2 else INK,
+        )
+    axis.set_xticks(range(len(table.columns)), [str(item) for item in table.columns])
+    axis.set_yticks(range(len(table)), [f"{item:g}" for item in table.index])
+    axis.set_xlabel("k — сколько флагов нужно для остановки", color=MUTED, fontsize=9)
+    axis.set_ylabel("порог θ", color=MUTED, fontsize=9)
+    axis.tick_params(colors=MUTED, length=0, labelsize=9)
+    for side in axis.spines.values():
+        side.set_visible(False)
+    _title(axis, title, subtitle)
+    figure.tight_layout()
+    return figure
+
+
+def plot_run_differences(paired: pd.DataFrame, *, name_a: str, name_b: str) -> Figure:
+    """Per-mode difference between two guards on the same traces; zero inside CI: no claim."""
+    modes = _modes(paired)
+    figure, axis = _figure(figsize=(9, 0.62 * len(modes) + 2.2))
+    _style(axis, grid_axis="x")
+    for position, mode in enumerate(modes):
+        record = paired[paired["mode"] == mode].iloc[0]
+        axis.plot([record["ci_low"], record["ci_high"]], [position] * 2, color=ACCENT, linewidth=2)
+        axis.plot(record["mean_difference"], position, "o", color=ACCENT, markersize=8, zorder=3)
+    axis.axvline(0, color=INK, linewidth=1.4, zorder=1)
+    axis.set_yticks(range(len(modes)), modes)
+    axis.invert_yaxis()
+    metric = paired["metric"].iloc[0] if not paired.empty else "metric"
+    axis.set_xlabel(
+        f"разность {metric}: {name_a} − {name_b} (95% bootstrap CI)", color=MUTED, fontsize=9
+    )
+    _title(
+        axis,
+        f"{name_a} против {name_b} на одних и тех же трассах",
+        f"справа от нуля — значение у {name_a} больше",
     )
     figure.tight_layout()
     return figure

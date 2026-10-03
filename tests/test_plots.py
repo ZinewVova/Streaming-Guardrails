@@ -104,3 +104,33 @@ def test_paired_difference_is_oriented_against_the_reference_mode():
     axis = plots.plot_paired_differences(paired, reference_mode="token").axes[0]
     points = [line.get_xdata()[0] for line in axis.lines if line.get_marker() == "o"]
     assert points == [2.0]
+
+
+def test_decision_rule_grid_and_run_differences_render():
+    grid = pd.DataFrame(
+        [
+            {"threshold": threshold, "trigger_count": k, "rate": threshold / k}
+            for threshold in (0.5, 0.7)
+            for k in (1, 4)
+        ]
+    )
+    paired = pd.DataFrame(
+        [
+            {
+                "mode": mode,
+                "metric": "leakage_tokens",
+                "mean_difference": 1.0 + index,
+                "ci_low": float(index),
+                "ci_high": 2.0 + index,
+            }
+            for index, mode in enumerate(MODES)
+        ]
+    )
+    figures = [
+        plots.plot_decision_rule_grid(grid, value="rate", title="rate"),
+        plots.plot_run_differences(paired, name_a="a", name_b="b"),
+        plots.plot_trace_timeline(
+            _token_decisions(), _results(), trace_id="a", policy="strict", threshold=0.7
+        ),
+    ]
+    assert all(figure.axes for figure in figures)

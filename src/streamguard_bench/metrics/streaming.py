@@ -193,3 +193,40 @@ def paired_mode_differences(
                     }
                 )
     return pd.DataFrame(rows)
+
+
+def paired_run_differences(
+    results_a: pd.DataFrame,
+    results_b: pd.DataFrame,
+    metric: str = "leakage_tokens",
+    *,
+    seed: int = 42,
+    resamples: int = 10_000,
+) -> pd.DataFrame:
+    """Compare two guards on the same traces, mode by mode: mean of (a - b) with a CI.
+
+    Each frame must hold one decision rule, that is one row per trace and mode.
+    """
+    rows = []
+    for name, frame in (("results_a", results_a), ("results_b", results_b)):
+        if frame.duplicated(["trace_id", "mode"]).any():
+            raise ValueError(f"{name} must contain a single policy and trigger count")
+    left = results_a.pivot(index="trace_id", columns="mode", values=metric)
+    right = results_b.pivot(index="trace_id", columns="mode", values=metric)
+    for mode in sorted(set(left.columns) & set(right.columns)):
+        pair = pd.concat([left[mode], right[mode]], axis=1, keys=["a", "b"]).dropna().astype(float)
+        differences = (pair["a"] - pair["b"]).to_numpy()
+        low, high = bootstrap_ci(differences, np.mean, seed=seed, resamples=resamples)
+        rows.append(
+            {
+                "mode": mode,
+                "metric": metric,
+                "traces": len(pair),
+                "mean_a": float(pair["a"].mean()),
+                "mean_b": float(pair["b"].mean()),
+                "mean_difference": float(np.mean(differences)),
+                "ci_low": low,
+                "ci_high": high,
+            }
+        )
+    return pd.DataFrame(rows)

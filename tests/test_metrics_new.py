@@ -5,6 +5,7 @@ from streamguard_bench.metrics import (
     compute_response_policy_metrics,
     compute_streaming_metrics,
     paired_mode_differences,
+    paired_run_differences,
     wilson_interval,
 )
 
@@ -84,3 +85,27 @@ def test_streaming_metrics_report_median_p90_and_exclude_failures():
     assert metrics["failed_traces"] == 1
     assert metrics["leakage_median"] == 2
     assert metrics["leakage_p90"] > metrics["leakage_median"]
+
+
+def test_paired_run_differences_compare_the_same_traces_per_mode():
+    def frame(values):
+        return pd.DataFrame(
+            [
+                {"trace_id": trace_id, "mode": "token", "leakage_tokens": value}
+                for trace_id, value in values.items()
+            ]
+        )
+
+    left = frame({"a": 10.0, "b": 4.0, "only_left": 100.0})
+    right = frame({"a": 6.0, "b": 4.0, "c": None})
+    result = paired_run_differences(left, right, resamples=50).iloc[0]
+    assert result["traces"] == 2
+    assert result["mean_difference"] == 2.0
+    assert result["ci_low"] <= 2.0 <= result["ci_high"]
+
+    try:
+        paired_run_differences(pd.concat([left, left]), right, resamples=50)
+    except ValueError as error:
+        assert "single policy" in str(error)
+    else:
+        raise AssertionError("ambiguous frames must be rejected")
