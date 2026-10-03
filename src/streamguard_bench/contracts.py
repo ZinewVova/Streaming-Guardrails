@@ -102,6 +102,8 @@ class InterventionResult:
     guard_time_ms: float
     error: str | None = None
     trigger_count: int = 1
+    leakage_characters: int | None = None
+    leakage_words: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

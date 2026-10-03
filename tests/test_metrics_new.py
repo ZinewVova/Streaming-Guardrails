@@ -109,3 +109,41 @@ def test_paired_run_differences_compare_the_same_traces_per_mode():
         assert "single policy" in str(error)
     else:
         raise AssertionError("ambiguous frames must be rejected")
+
+
+def test_streaming_metrics_report_word_leakage_and_tolerate_older_runs():
+    rows = [
+        {
+            "trace_id": trace_id,
+            "mode": "token",
+            "policy": "strict",
+            "response_ground_truth": "unsafe",
+            "blocked": True,
+            "signal_token": 3,
+            "released_tokens": 4,
+            "safe_withheld_tokens": None,
+            "leakage_tokens": tokens,
+            "normalized_leakage": 0.5,
+            "signal_offset_tokens": 1,
+            "premature_block": False,
+            "early_lead_tokens": None,
+            "detection_delay_tokens": 1,
+            "post_signal_buffer_delay_tokens": 0,
+            "checks": 4,
+            "guard_time_ms": 1.0,
+            "error": None,
+            "leakage_words": words,
+            "leakage_characters": words * 5,
+        }
+        for trace_id, tokens, words in [("a", 4, 2), ("b", 8, 6)]
+    ]
+    frame = pd.DataFrame(rows)
+    metrics = compute_streaming_metrics(frame, resamples=50).iloc[0]
+    assert metrics["leakage_words_mean"] == 4.0
+    assert metrics["leakage_characters_mean"] == 20.0
+
+    older = compute_streaming_metrics(
+        frame.drop(columns=["leakage_words", "leakage_characters"]), resamples=50
+    ).iloc[0]
+    assert pd.isna(older["leakage_words_mean"])
+    assert older["leakage_mean"] == 6.0

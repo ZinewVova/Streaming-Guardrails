@@ -25,6 +25,7 @@ def simulate_intervention(
     policy: SafetyPolicy | str,
     max_sentence_tokens: int = 128,
     trigger_count: int = 1,
+    unsafe_start_character: int | None = None,
 ) -> InterventionResult:
     if trigger_count < 1:
         raise ValueError("trigger_count must be at least 1")
@@ -57,6 +58,14 @@ def simulate_intervention(
     leakage = max(0, released - unsafe_start_token + 1) if unsafe else None
     unsafe_suffix = max(1, response_token_count - unsafe_start_token + 1)
     normalized = leakage / unsafe_suffix if unsafe else None
+    # Characters and words do not depend on the guard's tokenizer, unlike token leakage.
+    leaked_characters = leaked_words = None
+    if unsafe and unsafe_start_character is not None:
+        released_end = decisions[released - 1].end_character if released else 0
+        leaked_text = response[unsafe_start_character:released_end]
+        leaked_characters = len(leaked_text)
+        # A word counts as leaked once any part of it has been released.
+        leaked_words = len(leaked_text.split())
     offset = signal - unsafe_start_token if unsafe and signal is not None else None
     premature = offset is not None and offset < 0
     early = -offset if premature else None
@@ -84,6 +93,8 @@ def simulate_intervention(
         checks=checks,
         guard_time_ms=guard_time,
         trigger_count=trigger_count,
+        leakage_characters=leaked_characters,
+        leakage_words=leaked_words,
     )
 
 
@@ -98,6 +109,7 @@ def simulate_all(
     policies: Iterable[SafetyPolicy | str],
     max_sentence_tokens: int = 128,
     trigger_counts: Iterable[int] = (1,),
+    unsafe_start_character: int | None = None,
 ) -> list[InterventionResult]:
     counts = tuple(trigger_counts)
     return [
@@ -111,6 +123,7 @@ def simulate_all(
             policy=policy,
             max_sentence_tokens=max_sentence_tokens,
             trigger_count=trigger_count,
+            unsafe_start_character=unsafe_start_character,
         )
         for mode in modes
         for policy in policies

@@ -118,6 +118,9 @@ def compute_streaming_metrics(
             leakage, lambda values: np.percentile(values, 90), seed=seed, resamples=resamples
         )
         delay_median_ci = bootstrap_ci(delay, np.median, seed=seed, resamples=resamples)
+        words = _optional_column(unsafe, "leakage_words")
+        characters = _optional_column(unsafe, "leakage_characters")
+        words_ci = bootstrap_ci(words, np.mean, seed=seed, resamples=resamples)
         delay_p90_ci = bootstrap_ci(
             delay, lambda values: np.percentile(values, 90), seed=seed, resamples=resamples
         )
@@ -161,9 +164,21 @@ def compute_streaming_metrics(
                 "delay_median_ci_high": delay_median_ci[1],
                 "delay_p90_ci_low": delay_p90_ci[0],
                 "delay_p90_ci_high": delay_p90_ci[1],
+                "leakage_words_mean": words.mean(),
+                "leakage_words_median": words.median(),
+                "leakage_words_mean_ci_low": words_ci[0],
+                "leakage_words_mean_ci_high": words_ci[1],
+                "leakage_characters_mean": characters.mean(),
             }
         )
     return pd.DataFrame(rows)
+
+
+def _optional_column(frame: pd.DataFrame, column: str) -> pd.Series:
+    """Runs saved before a column existed report it as missing rather than failing."""
+    if column not in frame:
+        return pd.Series(dtype=float)
+    return frame[column].dropna().astype(float)
 
 
 def paired_mode_differences(

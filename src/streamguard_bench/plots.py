@@ -449,3 +449,88 @@ def plot_run_differences(paired: pd.DataFrame, *, name_a: str, name_b: str) -> F
     )
     figure.tight_layout()
     return figure
+
+
+def _model_colors(models) -> dict[str, str]:
+    return {name: MODE_PALETTE[index % len(MODE_PALETTE)] for index, name in enumerate(models)}
+
+
+def _model_handles(colors: dict[str, str]) -> list[Line2D]:
+    return [
+        Line2D([], [], color=color, marker="o", linewidth=2, label=name)
+        for name, color in colors.items()
+    ]
+
+
+def plot_error_tradeoff(metrics: pd.DataFrame) -> Figure:
+    """False blocks against misses, one point per guard, with Wilson intervals on both axes."""
+    colors = _model_colors(metrics["model"])
+    figure, axis = _figure(figsize=(6.4, 5.2))
+    _style(axis, grid_axis="both")
+    for record in metrics.to_dict("records"):
+        color = colors[record["model"]]
+        x, y = record["false_positive_rate"], record["false_negative_rate"]
+        axis.plot(
+            [record["false_positive_ci_low"], record["false_positive_ci_high"]],
+            [y, y],
+            color=color,
+            linewidth=2,
+        )
+        axis.plot(
+            [x, x],
+            [record["false_negative_ci_low"], record["false_negative_ci_high"]],
+            color=color,
+            linewidth=2,
+        )
+        axis.plot(x, y, "o", color=color, markersize=9, zorder=3)
+    limit = max(
+        metrics["false_positive_ci_high"].max(), metrics["false_negative_ci_high"].max(), 0.1
+    )
+    axis.set_xlim(0, limit * 1.08)
+    axis.set_ylim(0, limit * 1.08)
+    axis.set_xlabel("доля заблокированных безопасных ответов", color=MUTED, fontsize=9)
+    axis.set_ylabel("доля пропущенных вредных ответов", color=MUTED, fontsize=9)
+    _legend_below(axis, _model_handles(colors), ncols=min(len(colors), 3), pad=-0.16)
+    _title(axis, "Два вида ошибок блокировки ответа", "ближе к началу координат — лучше; 95% CI")
+    figure.tight_layout()
+    return figure
+
+
+def plot_model_leakage(
+    streaming_metrics: pd.DataFrame, *, statistic: str = "mean", unit: str = "tokens"
+) -> Figure:
+    """Leakage per buffer mode for several guards, each with its bootstrap interval.
+
+    Use `unit="words"` when the guards tokenize differently.
+    """
+    column = f"leakage_{statistic}" if unit == "tokens" else f"leakage_{unit}_{statistic}"
+    unit_name = {"tokens": "токены", "words": "слова"}.get(unit, unit)
+    low, high = f"{column}_ci_low", f"{column}_ci_high"
+    modes = _modes(streaming_metrics)
+    colors = _model_colors(streaming_metrics["model"].drop_duplicates())
+    offsets = np.linspace(-0.2, 0.2, len(colors)) if len(colors) > 1 else [0.0]
+    figure, axis = _figure(figsize=(9, 0.72 * len(modes) + 2.2))
+    _style(axis, grid_axis="x")
+    for offset, (model, color) in zip(offsets, colors.items(), strict=True):
+        for position, mode in enumerate(modes):
+            row = streaming_metrics[
+                (streaming_metrics["mode"] == mode) & (streaming_metrics["model"] == model)
+            ]
+            if row.empty:
+                continue
+            row = row.iloc[0]
+            axis.plot([row[low], row[high]], [position + offset] * 2, color=color, linewidth=2)
+            axis.plot(row[column], position + offset, "o", color=color, markersize=8, zorder=3)
+    axis.set_yticks(range(len(modes)), modes)
+    axis.invert_yaxis()
+    axis.set_xlabel(
+        f"leakage, {statistic} ({unit_name}, 95% bootstrap CI)", color=MUTED, fontsize=9
+    )
+    _legend_below(axis, _model_handles(colors), ncols=min(len(colors), 3), pad=-0.2)
+    _title(
+        axis,
+        f"Leakage по режимам буфера ({statistic})",
+        "перекрывающиеся интервалы не дают вывода о преимуществе",
+    )
+    figure.tight_layout()
+    return figure

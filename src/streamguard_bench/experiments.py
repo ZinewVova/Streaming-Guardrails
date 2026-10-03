@@ -256,6 +256,7 @@ def _replay(selected, traces, errors, modes, policies, max_sentence_tokens, trig
                 policies=policies,
                 max_sentence_tokens=max_sentence_tokens,
                 trigger_counts=(trigger_count,),
+                unsafe_start_character=int(row["unsafe_start_character"]),
             )
         )
     for failure in errors:
@@ -282,6 +283,8 @@ def _replay(selected, traces, errors, modes, policies, max_sentence_tokens, trig
                 "guard_time_ms": 0.0,
                 "error": failure["error"],
                 "trigger_count": trigger_count,
+                "leakage_characters": None,
+                "leakage_words": None,
             }
             for mode in modes
             for policy in policies

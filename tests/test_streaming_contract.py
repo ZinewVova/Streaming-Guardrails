@@ -117,3 +117,33 @@ def test_relabel_trace_applies_threshold_to_stored_scores():
     assert labels == ["safe", "unsafe", "unsafe"]
     with pytest.raises(ValueError, match="unsafe_score"):
         relabel_trace(trace(["safe"]), threshold=0.5)
+
+
+def test_leakage_in_characters_and_words_follows_the_released_text():
+    response = "ok. bad word here now"
+    ends = (2, 3, 7, 12, 17, 21)
+    labels = ["safe", "safe", "safe", "safe", "unsafe", "safe"]
+    decisions = tuple(
+        ResponseTokenDecision(i, i, end, label)
+        for i, (end, label) in enumerate(zip(ends, labels, strict=True), 1)
+    )
+    base = trace(labels)
+    scored = GuardTrace(**{**base.__dict__, "decisions": decisions})
+    result = simulate_intervention(
+        trace=scored,
+        response=response,
+        response_ground_truth="unsafe",
+        unsafe_start_token=3,
+        response_token_count=6,
+        mode="token",
+        policy="conservative",
+        unsafe_start_character=4,
+    )
+    # Four tokens were released; the unsafe part starts at character 4: "bad word".
+    assert result.released_tokens == 4
+    assert result.leakage_tokens == 2
+    assert result.leakage_characters == len("bad word")
+    assert result.leakage_words == 2
+
+    without_onset = replay(labels)
+    assert without_onset.leakage_words is None

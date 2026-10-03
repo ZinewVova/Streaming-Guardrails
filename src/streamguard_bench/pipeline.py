@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +69,49 @@ def run_or_load(
         dataset_revision=config["dataset"]["revision"],
         trigger_count=experiment.get("trigger_count", 1),
     )
+
+
+@dataclass(frozen=True)
+class SavedRun:
+    """One guard's saved run together with the decision rule it is compared under."""
+
+    name: str
+    config: dict[str, Any]
+    run: ExperimentRun
+    policy: str
+
+    @property
+    def results(self) -> pd.DataFrame:
+        """Replay results under the guard's primary policy, tagged with the guard name."""
+        frame = self.run.intervention_results
+        return frame[frame["policy"] == self.policy].assign(model=self.name)
+
+
+def load_saved_runs(
+    *, profile: str, root: str | Path = ".", config_dir: str | Path = "configs"
+) -> list[SavedRun]:
+    """Load every configured guard that already has a complete saved run.
+
+    Guards come in config file name order. A guard is compared under the first policy its
+    config lists, so each guard contributes exactly one decision rule.
+    """
+    root = Path(root)
+    runs = []
+    for path in sorted((root / config_dir).glob("*.yaml")):
+        config = yaml.safe_load(path.read_text())
+        if not saved_run_exists(config, profile=profile, root=root):
+            continue
+        runs.append(
+            SavedRun(
+                name=config["model"]["repository"].rsplit("/", 1)[-1],
+                config=config,
+                run=load_experiment_run(
+                    output_dir=root / config["experiment"]["output_dir"], profile=profile
+                ),
+                policy=next(iter(config["experiment"]["policies"])),
+            )
+        )
+    return runs
 
 
 def build_guard(config: dict[str, Any]) -> Any:

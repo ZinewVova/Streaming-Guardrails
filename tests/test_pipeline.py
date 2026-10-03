@@ -155,3 +155,23 @@ def test_tokenization_mismatch_is_reported_as_a_trace_error(tmp_path: Path):
     run = run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard())
     assert list(run.errors["trace_id"]) == ["safe"]
     assert "tokenization" in run.errors["error"].iloc[0]
+
+
+def test_saved_runs_are_loaded_per_config_under_the_first_policy(tmp_path: Path):
+    import yaml
+
+    from streamguard_bench.pipeline import load_saved_runs
+
+    config = _project(tmp_path)
+    config["model"]["repository"] = "org/first-guard"
+    run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard())
+    unfinished = {**config, "experiment": {**config["experiment"], "output_dir": "missing"}}
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "a.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
+    (tmp_path / "configs" / "b.yaml").write_text(yaml.safe_dump(unfinished, sort_keys=False))
+
+    runs = load_saved_runs(profile="smoke2", root=tmp_path)
+    assert [item.name for item in runs] == ["first-guard"]
+    assert runs[0].policy == "strict"
+    assert set(runs[0].results["policy"]) == {"strict"}
+    assert set(runs[0].results["model"]) == {"first-guard"}

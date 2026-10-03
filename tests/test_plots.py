@@ -134,3 +134,15 @@ def test_decision_rule_grid_and_run_differences_render():
         ),
     ]
     assert all(figure.axes for figure in figures)
+
+
+def test_multi_guard_figures_render():
+    results = _results()
+    classification = pd.concat(
+        [compute_response_policy_metrics(results).assign(model=name) for name in ("a", "b")]
+    )
+    streaming = pd.concat(
+        [compute_streaming_metrics(results, resamples=50).assign(model=name) for name in ("a", "b")]
+    )
+    figures = [plots.plot_error_tradeoff(classification), plots.plot_model_leakage(streaming)]
+    assert all(figure.axes for figure in figures)
