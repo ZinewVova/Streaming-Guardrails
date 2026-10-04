@@ -666,7 +666,13 @@ def plot_rule_frontier(grid: pd.DataFrame) -> Figure:
     axis.set_ylabel("доля пропущенных вредных ответов", color=MUTED, fontsize=9)
     handles = _model_handles(colors) + [
         Line2D(
-            [], [], color=MUTED, marker="*", markersize=12, markeredgecolor=INK, linewidth=0,
+            [],
+            [],
+            color=MUTED,
+            marker="*",
+            markersize=12,
+            markeredgecolor=INK,
+            linewidth=0,
             label="правило по умолчанию",
         )
     ]
@@ -679,15 +685,22 @@ def plot_rule_frontier(grid: pd.DataFrame) -> Figure:
 def plot_pairwise_matrix(
     pairs: pd.DataFrame, *, title: str, subtitle: str | None = None, percent: bool = False
 ) -> Figure:
-    """Row guard minus column guard for one metric; bold cells survive the Holm correction."""
+    """Row guard minus column guard for one metric, with its interval when `pairs` has one.
+
+    Bold cells with an asterisk survive the Holm correction.
+    """
     names = list(dict.fromkeys([*pairs["model_a"], *pairs["model_b"]]))
     size = len(names)
     matrix = np.full((size, size), np.nan)
     marked = np.zeros((size, size), dtype=bool)
+    intervals = {}
     for record in pairs.to_dict("records"):
         a, b = names.index(record["model_a"]), names.index(record["model_b"])
         matrix[a, b], matrix[b, a] = record["mean_difference"], -record["mean_difference"]
         marked[a, b] = marked[b, a] = bool(record["significant"])
+        if "ci_low" in record:
+            intervals[a, b] = (record["ci_low"], record["ci_high"])
+            intervals[b, a] = (-record["ci_high"], -record["ci_low"])
     limit = max(np.nanmax(np.abs(matrix)), 1e-9)
     figure, axis = _figure(figsize=(1.9 * size + 2.6, 0.9 * size + 2.3))
     # The colour range is wider than the data so that text stays readable on every cell.
@@ -695,11 +708,17 @@ def plot_pairwise_matrix(
     for (line, column), value in np.ndenumerate(matrix):
         if np.isnan(value):
             continue
-        text = f"{100 * value:+.1f} п.п." if percent else f"{value:+.1f}"
+        scale = 100 if percent else 1
+        text = f"{scale * value:+.1f} п.п." if percent else f"{value:+.1f}"
+        if (line, column) in intervals:
+            low, high = intervals[line, column]
+            text += f"\n[{scale * low:+.1f}; {scale * high:+.1f}]"
+        star = " *" if marked[line, column] else ""
+        text = text.replace("\n", star + "\n", 1) if "\n" in text else text + star
         axis.text(
             column,
             line,
-            text + (" *" if marked[line, column] else ""),
+            text,
             ha="center",
             va="center",
             fontsize=10,
@@ -711,7 +730,7 @@ def plot_pairwise_matrix(
     axis.tick_params(colors=MUTED, length=0, labelsize=9)
     for side in axis.spines.values():
         side.set_visible(False)
-    _title(axis, title, subtitle or "строка минус столбец; * — различие подтверждено")
+    _title(axis, title, subtitle or "строка минус столбец, [95% CI]; * — различие подтверждено")
     figure.tight_layout()
     return figure
 
