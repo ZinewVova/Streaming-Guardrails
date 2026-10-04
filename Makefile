@@ -12,7 +12,7 @@ CONFIG := configs/$(MODEL).yaml
 NOTEBOOKS := notebooks/02_streaming_benchmark.ipynb notebooks/04_scm_benchmark.ipynb notebooks/06_model_comparison.ipynb
 
 .DEFAULT_GOAL := help
-.PHONY: help models install install-models data test lint check run smoke full rerun reports notebooks
+.PHONY: help models install install-models data test lint check run smoke full rerun reports notebooks figures
 
 help: ## Показать этот список команд
 	@uv run python -c "import re; [print(f'  make {m[1]:<16}{m[2]}') for m in re.finditer(r'^([a-z-]+):.*?## (.*)$$', open('Makefile', encoding='utf-8').read(), re.M)]"
@@ -67,3 +67,6 @@ reports: ## CSV-отчёты по сохранённому прогону: make 
 
 notebooks: ## Заново исполнить ноутбуки с результатами по сохранённым прогонам
 	uv run jupyter nbconvert --to notebook --execute --inplace $(NOTEBOOKS)
+
+figures: ## Перерисовать графики для README по сохранённым полным прогонам
+	uv run python scripts/build_figures.py
