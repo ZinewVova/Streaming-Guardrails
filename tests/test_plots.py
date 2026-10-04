@@ -162,3 +162,42 @@ def test_rule_frontier_renders():
         ]
     )
     assert plots.plot_rule_frontier(grid).axes
+
+
+def test_multi_guard_comparison_figures_render():
+    pairs = pd.DataFrame(
+        [
+            {"model_a": "a", "model_b": "b", "mean_difference": -0.1, "significant": True},
+            {"model_a": "a", "model_b": "c", "mean_difference": 0.02, "significant": False},
+            {"model_a": "b", "model_b": "c", "mean_difference": 0.12, "significant": True},
+        ]
+    )
+    curves = pd.DataFrame(
+        [
+            {"model": model, "leaked_words": words, "stopped_share": share + shift}
+            for model, shift in (("a", 0.0), ("b", 0.1))
+            for words, share in ((0, 0.2), (10, 0.5), (40, 0.8))
+        ]
+    )
+    summary = pd.DataFrame(
+        [
+            {
+                "model": "a",
+                "latency_ms": 25.0,
+                "false_positive_rate": 0.2,
+                "false_negative_rate": 0.15,
+            },
+            {
+                "model": "b",
+                "latency_ms": 48.0,
+                "false_positive_rate": 0.3,
+                "false_negative_rate": 0.1,
+            },
+        ]
+    )
+    figures = [
+        plots.plot_pairwise_matrix(pairs, title="difference", percent=True),
+        plots.plot_stopping_curves(curves),
+        plots.plot_cost_quality(summary),
+    ]
+    assert all(figure.axes for figure in figures)

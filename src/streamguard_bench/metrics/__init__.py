@@ -5,6 +5,8 @@ from .streaming import (
     compute_streaming_metrics,
     paired_mode_differences,
     paired_run_differences,
+    pairwise_run_differences,
+    stopped_within,
     wilson_interval,
 )
 
@@ -15,5 +17,7 @@ __all__ = [
     "compute_streaming_metrics",
     "paired_mode_differences",
     "paired_run_differences",
+    "pairwise_run_differences",
+    "stopped_within",
     "wilson_interval",
 ]

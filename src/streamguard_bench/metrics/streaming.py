@@ -245,3 +245,79 @@ def paired_run_differences(
             }
         )
     return pd.DataFrame(rows)
+
+
+def pairwise_run_differences(
+    results: dict[str, pd.DataFrame],
+    metric: str,
+    *,
+    mode: str = "token",
+    seed: int = 42,
+    resamples: int = 10_000,
+    alpha: float = 0.05,
+) -> pd.DataFrame:
+    """Compare every pair of guards on the same traces in one buffer mode.
+
+    Each row is `model_a - model_b` with a bootstrap interval and a two-sided bootstrap
+    p-value. `significant` applies the Holm correction across all pairs, because with several
+    guards some pair would otherwise look different by chance.
+    """
+    values = {}
+    for name, frame in results.items():
+        selected = frame[frame["mode"] == mode]
+        if selected["trace_id"].duplicated().any():
+            raise ValueError(f"{name} must contain a single policy and trigger count")
+        values[name] = selected.set_index("trace_id")[metric].astype(float)
+    rows = []
+    names = list(values)
+    for index, name_a in enumerate(names):
+        for name_b in names[index + 1 :]:
+            pair = pd.concat([values[name_a], values[name_b]], axis=1, keys=["a", "b"]).dropna()
+            differences = (pair["a"] - pair["b"]).to_numpy()
+            rng = np.random.default_rng(seed)
+            draws = rng.choice(differences, (resamples, len(differences)), replace=True)
+            estimates = draws.mean(axis=1)
+            low, high = np.percentile(estimates, [2.5, 97.5])
+            tail = min((estimates <= 0).mean(), (estimates >= 0).mean())
+            rows.append(
+                {
+                    "model_a": name_a,
+                    "model_b": name_b,
+                    "metric": metric,
+                    "traces": len(pair),
+                    "mean_difference": float(differences.mean()),
+                    "ci_low": float(low),
+                    "ci_high": float(high),
+                    "p_value": float(min(1.0, 2 * tail)),
+                }
+            )
+    frame = pd.DataFrame(rows)
+    # Holm: the smallest p-value is tested against alpha / m, the next against alpha / (m - 1),
+    # and testing stops at the first pair that fails.
+    order = frame["p_value"].sort_values().index
+    significant, still_rejecting = {}, True
+    for rank, position in enumerate(order):
+        still_rejecting = still_rejecting and frame.at[position, "p_value"] <= alpha / (
+            len(order) - rank
+        )
+        significant[position] = still_rejecting
+    frame["significant"] = pd.Series(significant)
+    return frame
+
+
+def stopped_within(
+    results: pd.DataFrame, limits: Sequence[int], *, mode: str = "token"
+) -> pd.DataFrame:
+    """Share of harmful responses stopped before more than `limit` harmful words leaked.
+
+    A missed response is never stopped, so the curve levels off below one by the miss rate.
+    """
+    harmful = results[(results["mode"] == mode) & (results["response_ground_truth"] == "unsafe")]
+    blocked = harmful["blocked"].astype(bool).to_numpy()
+    leaked = harmful["leakage_words"].to_numpy(float)
+    return pd.DataFrame(
+        {
+            "leaked_words": list(limits),
+            "stopped_share": [float((blocked & (leaked <= limit)).mean()) for limit in limits],
+        }
+    )

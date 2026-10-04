@@ -29,6 +29,9 @@ ACCENT = "#2a78d6"
 FILL = "#b7d3f6"
 BUFFERED = "#e4e2dc"
 SEQUENTIAL = LinearSegmentedColormap.from_list("benchmark_blue", ["#eef4fd", "#0d366b"])
+DIVERGING = LinearSegmentedColormap.from_list(
+    "benchmark_diverging", ["#2a78d6", "#fcfcfb", "#eb6834"]
+)
 
 
 def _style(axis, *, grid_axis: str = "y"):
@@ -669,5 +672,101 @@ def plot_rule_frontier(grid: pd.DataFrame) -> Figure:
     ]
     _legend_below(axis, handles, ncols=min(len(handles), 3), pad=-0.16)
     _title(axis, "Все правила остановки", "линия — лучшие правила; ближе к нулю — лучше")
+    figure.tight_layout()
+    return figure
+
+
+def plot_pairwise_matrix(
+    pairs: pd.DataFrame, *, title: str, subtitle: str | None = None, percent: bool = False
+) -> Figure:
+    """Row guard minus column guard for one metric; bold cells survive the Holm correction."""
+    names = list(dict.fromkeys([*pairs["model_a"], *pairs["model_b"]]))
+    size = len(names)
+    matrix = np.full((size, size), np.nan)
+    marked = np.zeros((size, size), dtype=bool)
+    for record in pairs.to_dict("records"):
+        a, b = names.index(record["model_a"]), names.index(record["model_b"])
+        matrix[a, b], matrix[b, a] = record["mean_difference"], -record["mean_difference"]
+        marked[a, b] = marked[b, a] = bool(record["significant"])
+    limit = max(np.nanmax(np.abs(matrix)), 1e-9)
+    figure, axis = _figure(figsize=(1.9 * size + 2.6, 0.9 * size + 2.3))
+    # The colour range is wider than the data so that text stays readable on every cell.
+    axis.imshow(matrix, cmap=DIVERGING, vmin=-1.8 * limit, vmax=1.8 * limit, aspect="auto")
+    for (line, column), value in np.ndenumerate(matrix):
+        if np.isnan(value):
+            continue
+        text = f"{100 * value:+.1f} п.п." if percent else f"{value:+.1f}"
+        axis.text(
+            column,
+            line,
+            text + (" *" if marked[line, column] else ""),
+            ha="center",
+            va="center",
+            fontsize=10,
+            color=INK,
+            fontweight="bold" if marked[line, column] else "normal",
+        )
+    axis.set_xticks(range(size), names, rotation=20, ha="right")
+    axis.set_yticks(range(size), names)
+    axis.tick_params(colors=MUTED, length=0, labelsize=9)
+    for side in axis.spines.values():
+        side.set_visible(False)
+    _title(axis, title, subtitle or "строка минус столбец; * — различие подтверждено")
+    figure.tight_layout()
+    return figure
+
+
+def plot_stopping_curves(curves: pd.DataFrame) -> Figure:
+    """How much harmful text gets out before each guard stops the stream."""
+    colors = _model_colors(curves["model"].drop_duplicates())
+    figure, axis = _figure(figsize=(8, 4.4))
+    _style(axis, grid_axis="both")
+    for model, color in colors.items():
+        curve = curves[curves["model"] == model]
+        axis.step(
+            curve["leaked_words"], curve["stopped_share"], where="post", color=color, linewidth=2
+        )
+    axis.set_ylim(0, 1.02)
+    axis.set_xlim(left=0)
+    axis.set_xlabel("слов вредного фрагмента, ушедших пользователю", color=MUTED, fontsize=9)
+    axis.set_ylabel("доля остановленных вредных ответов", color=MUTED, fontsize=9)
+    _legend_below(axis, _model_handles(colors), ncols=min(len(colors), 3), pad=-0.2)
+    _title(axis, "Как быстро останавливается вредный ответ", "выше и левее — лучше")
+    figure.tight_layout()
+    return figure
+
+
+def plot_cost_quality(summary: pd.DataFrame) -> Figure:
+    """Per-token latency against both block errors, one labelled point per guard."""
+    colors = _model_colors(summary["model"])
+    panels = (
+        ("false_negative_rate", "доля пропущенных вредных ответов"),
+        ("false_positive_rate", "доля заблокированных безопасных ответов"),
+    )
+    figure, axes = _figure(1, 2, figsize=(10, 4), sharex=True)
+    for axis, (column, label) in zip(axes, panels, strict=True):
+        _style(axis, grid_axis="both")
+        for record in summary.to_dict("records"):
+            axis.plot(
+                record["latency_ms"],
+                record[column],
+                "o",
+                color=colors[record["model"]],
+                markersize=10,
+                zorder=3,
+            )
+            axis.annotate(
+                record["model"],
+                (record["latency_ms"], record[column]),
+                textcoords="offset points",
+                xytext=(8, 6),
+                color=MUTED,
+                fontsize=9,
+            )
+        axis.set_xlim(0, summary["latency_ms"].max() * 1.6)
+        axis.set_ylim(0, max(summary[column].max() * 1.4, 0.1))
+        axis.set_xlabel("медианное время проверки токена, мс", color=MUTED, fontsize=9)
+        axis.set_ylabel(label, color=MUTED, fontsize=9)
+    _title(axes[0], "Качество против стоимости", "ниже и левее — лучше")
     figure.tight_layout()
     return figure

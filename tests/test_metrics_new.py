@@ -6,6 +6,8 @@ from streamguard_bench.metrics import (
     compute_streaming_metrics,
     paired_mode_differences,
     paired_run_differences,
+    pairwise_run_differences,
+    stopped_within,
     wilson_interval,
 )
 
@@ -147,3 +149,42 @@ def test_streaming_metrics_report_word_leakage_and_tolerate_older_runs():
     ).iloc[0]
     assert pd.isna(older["leakage_words_mean"])
     assert older["leakage_mean"] == 6.0
+
+
+def _guard_frame(values, blocked=None):
+    return pd.DataFrame(
+        [
+            {
+                "trace_id": f"t{index}",
+                "mode": "token",
+                "response_ground_truth": "unsafe",
+                "blocked": True if blocked is None else blocked[index],
+                "leakage_words": value,
+            }
+            for index, value in enumerate(values)
+        ]
+    )
+
+
+def test_pairwise_differences_apply_the_holm_correction():
+    base = [float(index % 5) for index in range(40)]
+    results = {
+        "a": _guard_frame(base),
+        "b": _guard_frame([value + 10 for value in base]),
+        "c": _guard_frame(
+            [value + (0.2 if index % 2 else -0.2) for index, value in enumerate(base)]
+        ),
+    }
+    pairs = pairwise_run_differences(results, "leakage_words", resamples=500)
+    table = pairs.set_index(["model_a", "model_b"])
+    assert len(pairs) == 3
+    assert table.loc[("a", "b"), "mean_difference"] == -10.0
+    assert table.loc[("a", "b"), "significant"]
+    assert table.loc[("b", "c"), "significant"]
+    assert not table.loc[("a", "c"), "significant"]
+
+
+def test_stopped_within_counts_blocked_responses_only():
+    frame = _guard_frame([0, 5, 20, 3], blocked=[True, True, True, False])
+    curve = stopped_within(frame, [0, 5, 100]).set_index("leaked_words")["stopped_share"]
+    assert curve.to_dict() == {0: 0.25, 5: 0.5, 100: 0.75}
