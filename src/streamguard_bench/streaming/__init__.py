@@ -12,7 +12,13 @@ from .data_classes import (
     TokenizedResponse,
     TriggerMode,
 )
-from .engine import relabel_trace, simulate_all, simulate_intervention
+from .engine import (
+    checkpoint_tokens,
+    relabel_trace,
+    restrict_to_checkpoints,
+    simulate_all,
+    simulate_intervention,
+)
 
 __all__ = [
     "DEFAULT_MODES",
@@ -25,7 +31,9 @@ __all__ = [
     "TokenDecision",
     "TokenizedResponse",
     "TriggerMode",
+    "checkpoint_tokens",
     "relabel_trace",
+    "restrict_to_checkpoints",
     "simulate_all",
     "simulate_intervention",
 ]

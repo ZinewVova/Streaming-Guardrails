@@ -45,6 +45,8 @@
 - [`02_streaming_benchmark.ipynb`](notebooks/02_streaming_benchmark.ipynb) — разбор
   прогона Qwen3Guard-Stream;
 - [`04_scm_benchmark.ipynb`](notebooks/04_scm_benchmark.ipynb) — разбор прогона SCM-0.5B;
+- [`05_qwen3guard_gen_benchmark.ipynb`](notebooks/05_qwen3guard_gen_benchmark.ipynb) — разбор
+  непотокового guard Qwen3Guard-Gen-0.6B, который проверяет только готовые префиксы ответа;
 - [`06_model_comparison.ipynb`](notebooks/06_model_comparison.ipynb) — сравнение всех
   моделей на одних и тех же трассах.
 

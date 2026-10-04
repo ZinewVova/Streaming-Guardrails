@@ -201,3 +201,17 @@ def test_multi_guard_comparison_figures_render():
         plots.plot_cost_quality(summary),
     ]
     assert all(figure.axes for figure in figures)
+
+
+def test_mode_error_rates_plot_has_one_row_per_mode():
+    results = _results()
+    metrics = pd.concat(
+        [
+            compute_response_policy_metrics(results[results["mode"] == mode]).assign(mode=mode)
+            for mode in MODES
+        ],
+        ignore_index=True,
+    )
+    figure = plots.plot_mode_error_rates(metrics, title="response")
+    assert len(figure.axes) >= 2
+    assert [label.get_text() for label in figure.axes[0].get_yticklabels()] == list(MODES)

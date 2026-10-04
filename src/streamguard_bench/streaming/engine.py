@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import replace
+from types import SimpleNamespace
 
 from streamguard_bench.contracts import GuardTrace, InterventionResult, ResponseTokenDecision
 
@@ -107,6 +108,65 @@ def simulate_intervention(
     )
 
 
+def checkpoint_tokens(
+    end_characters: Sequence[int],
+    response: str,
+    modes: Iterable[BufferMode | str],
+    max_sentence_tokens: int = 128,
+) -> set[int]:
+    """Token numbers (counted from 1) at which any of the modes passes text to the guard."""
+
+    placeholders = [SimpleNamespace(end_character=end) for end in end_characters]
+    return {
+        end
+        for mode in modes
+        for _, end in _buffer_checkpoints(
+            placeholders, response, BufferMode(mode), max_sentence_tokens
+        )
+    }
+
+
+def restrict_to_checkpoints(
+    trace: GuardTrace,
+    response: str,
+    mode: BufferMode | str,
+    max_sentence_tokens: int = 128,
+    warmup_tokens: int = 0,
+) -> GuardTrace:
+    """Keep only the decisions a guard that checks at this mode's checkpoints would make.
+
+    A guard that cannot read a stream is run once per checkpoint of every mode, and the
+    saved decisions are the union of those points. A mode must not see decisions made at
+    points its own buffer never passes to the guard, so the rest are reset to safe.
+
+    With `warmup_tokens` the checks that fall within the first tokens are skipped as well:
+    that text is released without being checked.
+    """
+
+    selected = BufferMode(mode)
+    if selected is BufferMode.TOKEN:
+        if any(item.confidence is None for item in trace.decisions):
+            raise ValueError("Token mode needs every token scored; this trace was scored sparsely")
+        ends = {item.token_index for item in trace.decisions}
+    else:
+        ends = checkpoint_tokens(
+            [item.end_character for item in trace.decisions],
+            response,
+            [selected],
+            max_sentence_tokens,
+        )
+    ends = {end for end in ends if end > warmup_tokens}
+    return replace(
+        trace,
+        decisions=tuple(
+            item
+            if item.token_index in ends
+            else ResponseTokenDecision(item.token_index, item.token_id, item.end_character, "safe")
+            for item in trace.decisions
+        ),
+    )
+
+
 def simulate_all(
     *,
     trace: GuardTrace,
@@ -121,11 +181,17 @@ def simulate_all(
     unsafe_start_character: int | None = None,
     trigger_mode: TriggerMode | str = TriggerMode.CUMULATIVE,
     trigger_window: int | None = None,
+    checkpoint_scoring: bool = False,
+    warmup_tokens: int = 0,
 ) -> list[InterventionResult]:
+    if warmup_tokens and not checkpoint_scoring:
+        raise ValueError("warmup_tokens is defined only for checkpoint-scored guards")
     counts = tuple(trigger_counts)
     return [
         simulate_intervention(
-            trace=trace,
+            trace=restrict_to_checkpoints(trace, response, mode, max_sentence_tokens, warmup_tokens)
+            if checkpoint_scoring
+            else trace,
             response=response,
             response_ground_truth=response_ground_truth,
             unsafe_start_token=unsafe_start_token,

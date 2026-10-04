@@ -196,6 +196,46 @@ def plot_error_rates(metrics: pd.DataFrame, *, title: str) -> Figure:
     return figure
 
 
+def plot_mode_error_rates(metrics: pd.DataFrame, *, title: str) -> Figure:
+    """False positive and false negative rates per buffer mode with 95% Wilson intervals.
+
+    `metrics` has one row per mode and policy (`mode`, `policy` and the columns of
+    `compute_response_policy_metrics`), for guards whose blocking depends on the mode.
+    """
+    modes = _modes(metrics)
+    policies = sorted(metrics["policy"].unique())
+    offsets = np.linspace(0.16, -0.16, len(policies))
+    figure, axes = _figure(1, 2, figsize=(10, 0.62 * len(modes) + 2.4), sharey=True)
+    panels = [
+        ("false_positive", "безопасное заблокировано (FPR)"),
+        ("false_negative", "опасное пропущено (FNR)"),
+    ]
+    for axis, (prefix, label) in zip(axes, panels, strict=True):
+        _style(axis, grid_axis="x")
+        for offset, policy in zip(offsets, policies, strict=False):
+            color = POLICY_COLORS.get(policy, ACCENT)
+            for position, mode in enumerate(modes):
+                rows = metrics[(metrics["mode"] == mode) & (metrics["policy"] == policy)]
+                if rows.empty:
+                    continue
+                row = rows.iloc[0]
+                axis.plot(
+                    [row[f"{prefix}_ci_low"], row[f"{prefix}_ci_high"]],
+                    [position + offset] * 2,
+                    color=color,
+                    linewidth=2,
+                )
+                axis.plot(row[f"{prefix}_rate"], position + offset, "o", color=color, markersize=8)
+        axis.set_xlim(-0.03, 1.0)
+        axis.set_xlabel(f"доля, {label} (95% Wilson CI)", color=MUTED, fontsize=9)
+    axes[0].set_yticks(range(len(modes)), modes)
+    axes[0].invert_yaxis()
+    _legend_below(axes[0], _policy_handles(policies), ncols=len(policies), pad=-0.2)
+    figure.suptitle(title, color=INK, fontsize=13, x=0.02, ha="left")
+    figure.tight_layout(rect=(0, 0, 1, 0.94))
+    return figure
+
+
 def plot_trace_timeline(
     token_decisions: pd.DataFrame,
     results: pd.DataFrame,

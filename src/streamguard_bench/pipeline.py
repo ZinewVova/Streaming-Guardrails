@@ -51,6 +51,7 @@ def saved_run_exists(config: dict[str, Any], *, profile: str, root: str | Path =
         and saved.get("trigger_count", 1) == experiment.get("trigger_count", 1)
         and saved.get("trigger_mode", "cumulative") == experiment.get("trigger_mode", "cumulative")
         and saved.get("trigger_window") == experiment.get("trigger_window")
+        and saved.get("checkpoint_scoring", False) == experiment.get("checkpoint_scoring", False)
     )
 
 
@@ -152,4 +153,13 @@ def build_guard(config: dict[str, Any]) -> Any:
         from streamguard_bench.guards import SCMAdapter
 
         return SCMAdapter(model["repository"], threshold=model["threshold"], **common)
+    if adapter == "qwen3guard_gen":
+        from streamguard_bench.guards import Qwen3GuardGenAdapter
+
+        return Qwen3GuardGenAdapter(
+            model["repository"],
+            modes=config["experiment"]["modes"],
+            max_sentence_tokens=config["experiment"]["max_sentence_tokens"],
+            **common,
+        )
     raise ValueError(f"Unknown guard adapter: {adapter}")
