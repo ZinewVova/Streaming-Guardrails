@@ -19,6 +19,8 @@ from matplotlib.ticker import FuncFormatter
 MODE_ORDER = ("token", "chunk_8", "chunk_16", "chunk_32", "sentence", "full_buffered")
 MODE_PALETTE = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300")
 MODE_COLORS = dict(zip(MODE_ORDER, MODE_PALETTE, strict=False))
+# Guards are told apart by hue alone, so the palette avoids neighbouring warm colours.
+MODEL_PALETTE = ("#2a78d6", "#eb6834", "#1baf7a", "#7b4fc4", "#6b6a66", "#e87ba4")
 POLICY_COLORS = {"strict": "#2a78d6", "conservative": "#eb6834"}
 LABEL_COLORS = {"safe": "#1baf7a", "unsafe": "#e34948", "controversial": "#eda100"}
 LABEL_MARKERS = {"safe": "o", "unsafe": "X", "controversial": "D"}
@@ -574,7 +576,7 @@ def plot_run_differences(paired: pd.DataFrame, *, name_a: str, name_b: str) -> F
 
 
 def _model_colors(models) -> dict[str, str]:
-    return {name: MODE_PALETTE[index % len(MODE_PALETTE)] for index, name in enumerate(models)}
+    return {name: MODEL_PALETTE[index % len(MODEL_PALETTE)] for index, name in enumerate(models)}
 
 
 def _model_handles(colors: dict[str, str]) -> list[Line2D]:
@@ -893,36 +895,38 @@ def plot_cost_quality(
         ("false_negative_rate", "доля пропущенных вредных ответов"),
         ("false_positive_rate", "доля заблокированных безопасных ответов"),
     )
-    figure, axes = _figure(1, 2, figsize=(10, 4), sharex=True)
+    figure, axes = _figure(1, 2, figsize=(10, 4.4), sharex=True)
     for axis, (error, error_label) in zip(axes, panels, strict=True):
         _style(axis, grid_axis="both")
-        for index, record in enumerate(summary.to_dict("records")):
+        for record in summary.to_dict("records"):
             axis.plot(
                 record[column],
                 record[error],
                 "o",
                 color=colors[record["model"]],
-                markersize=10,
+                markersize=11,
                 zorder=3,
-            )
-            axis.annotate(
-                record["model"],
-                (record[column], record[error]),
-                textcoords="offset points",
-                # Labels alternate above and below so that close points stay readable.
-                xytext=(8, 6) if index % 2 == 0 else (8, -15),
-                color=MUTED,
-                fontsize=9,
             )
         if log:
             axis.set_xscale("log")
-            axis.set_xlim(summary[column].min() / 2, summary[column].max() * 8)
+            axis.set_xlim(summary[column].min() / 2, summary[column].max() * 2)
             axis.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
         else:
-            axis.set_xlim(0, summary[column].max() * 1.6)
+            axis.set_xlim(0, summary[column].max() * 1.2)
         axis.set_ylim(0, max(summary[error].max() * 1.4, 0.1))
         axis.set_xlabel(label, color=MUTED, fontsize=9)
         axis.set_ylabel(error_label, color=MUTED, fontsize=9)
+    # Guards with equal errors would have overlapping labels, so they are named in a legend.
+    figure.legend(
+        handles=[
+            Line2D([], [], color=color, marker="o", linewidth=0, markersize=9, label=name)
+            for name, color in colors.items()
+        ],
+        loc="lower center",
+        ncols=min(len(colors), 4),
+        frameon=False,
+        fontsize=9,
+    )
     _title(axes[0], "Качество против стоимости", "ниже и левее — лучше")
-    figure.tight_layout()
+    figure.tight_layout(rect=(0, 0.08, 1, 1))
     return figure
