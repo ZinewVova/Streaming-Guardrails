@@ -96,8 +96,10 @@ def _valid(frame: pd.DataFrame) -> pd.DataFrame:
 def plot_confusion_matrices(metrics: pd.DataFrame, *, title: str) -> Figure:
     """One 2x2 count matrix per policy: rows are ground truth, columns the decision.
 
-    Precision and recall of the blocking decision are printed under each matrix.
+    The positive class is `unsafe`, so a false positive is a safe item that was blocked.
+    Each cell carries its TN/FP/FN/TP tag; precision and recall are printed underneath.
     """
+    tags = (("TN", "FP"), ("FN", "TP"))
     policies = list(metrics["policy"])
     width = 3.6 * len(policies) + 0.6
     figure, axes = _figure(1, len(policies), figsize=(width, 3.9), squeeze=False)
@@ -114,6 +116,15 @@ def plot_confusion_matrices(metrics: pd.DataFrame, *, title: str) -> Figure:
                 va="center",
                 fontsize=14,
                 color="#ffffff" if value > 0.6 * largest else INK,
+            )
+            axis.text(
+                column - 0.44,
+                line - 0.38,
+                tags[line][column],
+                ha="left",
+                va="center",
+                fontsize=8,
+                color="#ffffff" if value > 0.6 * largest else MUTED,
             )
         axis.set_xticks([0, 1], ["allowed", "blocked"])
         axis.set_yticks([0, 1], ["safe", "unsafe"])
@@ -146,8 +157,8 @@ def plot_error_rates(metrics: pd.DataFrame, *, title: str) -> Figure:
     figure, axis = _figure(figsize=(8, 3.2))
     _style(axis, grid_axis="x")
     rates = [
-        ("false positive rate", "false_positive"),
-        ("false negative rate", "false_negative"),
+        ("false positive rate\nбезопасное заблокировано", "false_positive"),
+        ("false negative rate\nопасное пропущено", "false_negative"),
     ]
     policies = list(metrics["policy"])
     offsets = np.linspace(0.18, -0.18, len(policies))
@@ -177,7 +188,7 @@ def plot_error_rates(metrics: pd.DataFrame, *, title: str) -> Figure:
     axis.set_ylim(-0.5, len(rates) - 0.25)
     axis.set_xlabel("доля (95% Wilson CI)", color=MUTED, fontsize=9)
     _legend_below(axis, _policy_handles(policies), ncols=len(policies), pad=-0.34)
-    _title(axis, title, "точка — оценка, отрезок — интервал")
+    _title(axis, title, "положительный класс — unsafe · точка — оценка, отрезок — интервал")
     figure.tight_layout()
     return figure
 
