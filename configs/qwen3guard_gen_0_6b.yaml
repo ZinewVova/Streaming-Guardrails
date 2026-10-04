@@ -5,7 +5,8 @@ dataset:
 model:
   adapter: qwen3guard_gen
   repository: Qwen/Qwen3Guard-Gen-0.6B
-  # Paste the commit that was scored: model_revision in data/interim/qwen3guard_gen/full/run_metadata.json
+  # Nominal size, used only to express the cost of a run in FLOPs.
+  parameters: 600000000
   revision: fada3b2f655b89601929198343c94cd2f64d93cc
   tokenizer_revision: fada3b2f655b89601929198343c94cd2f64d93cc
 experiment:
@@ -23,7 +24,7 @@ experiment:
   # One verdict at a checkpoint is enough to stop: there is no per-token signal to debounce.
   trigger_count: 1
   max_sentence_tokens: 128
-  output_dir: data/interim/qwen3guard_gen
+  output_dir: data/interim/qwen3guard_gen_0_6b
 runtime:
   device: null
   resume: true

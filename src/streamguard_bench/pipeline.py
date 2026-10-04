@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pandas as pd
@@ -16,9 +17,13 @@ from streamguard_bench.experiments import (
     ExperimentRun,
     load_experiment_run,
     run_experiment,
+    sweep_decision_rules,
 )
 
-DEFAULT_CONFIG = Path("configs/qwen3guard_baseline.yaml")
+# The default guard is also the baseline that the other guards are compared with.
+DEFAULT_CONFIG = Path("configs/qwen3guard_stream_0_6b.yaml")
+# Model settings that change the decisions and are recorded with a run when present.
+INFERENCE_SETTINGS = ("max_new_tokens", "quantization")
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG, *, root: str | Path = ".") -> dict[str, Any]:
@@ -43,18 +48,8 @@ def saved_run_exists(config: dict[str, Any], *, profile: str, root: str | Path =
     if not metadata_path.exists():
         return True
     saved = json.loads(metadata_path.read_text())
-    model = config.get("model", {})
-    if model.get("adapter") == "sentguard":
-        settings = saved.get("inference_settings", {})
-        if (
-            saved.get("model_id") != model["repository"]
-            or saved.get("model_revision") != model["revision"]
-            or settings.get("max_new_tokens") != model["max_new_tokens"]
-            or settings.get("quantization") != model.get("quantization")
-            or settings.get("generation_tokenizer_revision")
-            != (model["tokenizer_revision"] or model["revision"])
-        ):
-            return False
+    if not _same_model(saved, config.get("model", {})):
+        return False
     experiment = config["experiment"]
     return (
         saved["modes"] == list(experiment["modes"])
@@ -64,6 +59,46 @@ def saved_run_exists(config: dict[str, Any], *, profile: str, root: str | Path =
         and saved.get("trigger_mode", "cumulative") == experiment.get("trigger_mode", "cumulative")
         and saved.get("trigger_window") == experiment.get("trigger_window")
         and saved.get("checkpoint_scoring", False) == experiment.get("checkpoint_scoring", False)
+    )
+
+
+def _same_model(saved: dict[str, Any], model: dict[str, Any]) -> bool:
+    """Whether the saved decisions were made by the model the config describes."""
+    if "repository" in model and saved.get("model_id") != model["repository"]:
+        return False
+    if model.get("revision") and saved.get("model_revision") != model["revision"]:
+        return False
+    if saved.get("threshold") != model.get("threshold"):
+        return False
+    settings = saved.get("inference_settings", {})
+    return all(settings.get(key) == model.get(key) for key in INFERENCE_SETTINGS)
+
+
+def _saved_guard(config: dict[str, Any], directory: Path) -> Any | None:
+    """Stand-in for the guard when every trace of the run is already scored.
+
+    Rebuilding the tables under another stop rule or mode list then needs no model weights.
+    """
+    metadata_path = directory / "run_metadata.json"
+    ids_path = directory / RESULT_FILES["ids"]
+    if not metadata_path.exists() or not ids_path.exists():
+        return None
+    saved = json.loads(metadata_path.read_text())
+    scored = all(
+        (directory / "checkpoints" / f"{trace_id}.json").exists()
+        for trace_id in json.loads(ids_path.read_text())
+    )
+    if not scored or not _same_model(saved, config.get("model", {})):
+        return None
+    return SimpleNamespace(
+        model_id=saved["model_id"],
+        model_revision=saved.get("model_revision"),
+        tokenizer_id=saved["tokenizer_id"],
+        tokenizer_revision=saved.get("tokenizer_revision"),
+        device=saved["device"],
+        threshold=saved.get("threshold"),
+        inference_settings=saved.get("inference_settings"),
+        close=lambda: None,
     )
 
 
@@ -88,6 +123,8 @@ def run_or_load(
     if not force and saved_run_exists(config, profile=profile, root=root):
         return load_experiment_run(output_dir=output_dir, profile=profile)
     experiment = config["experiment"]
+    if guard is None and config["runtime"]["resume"]:
+        guard = _saved_guard(config, output_dir / profile)
     return run_experiment(
         dataset=pd.read_parquet(root / config["dataset"]["prepared_path"]),
         guard=guard if guard is not None else build_guard(config),
@@ -102,6 +139,7 @@ def run_or_load(
         trigger_count=experiment.get("trigger_count", 1),
         trigger_mode=experiment.get("trigger_mode", "cumulative"),
         trigger_window=experiment.get("trigger_window"),
+        checkpoint_scoring=experiment.get("checkpoint_scoring"),
     )
 
 
@@ -117,8 +155,28 @@ class SavedRun:
     @property
     def results(self) -> pd.DataFrame:
         """Replay results under the guard's primary policy, tagged with the guard name."""
+        return self.results_for(self.policy)
+
+    @property
+    def policies(self) -> tuple[str, ...]:
+        return tuple(self.config["experiment"]["policies"])
+
+    @property
+    def modes(self) -> tuple[str, ...]:
+        return tuple(self.config["experiment"]["modes"])
+
+    @property
+    def checkpoint_scoring(self) -> bool:
+        """True for a guard asked only at buffer checkpoints: its errors depend on the mode."""
+        return bool(self.config["experiment"].get("checkpoint_scoring", False))
+
+    def results_for(self, policy: str, mode: str | None = None) -> pd.DataFrame:
+        """Replay results under one policy, optionally in one buffer mode."""
         frame = self.run.intervention_results
-        return frame[frame["policy"] == self.policy].assign(model=self.name)
+        frame = frame[frame["policy"] == policy]
+        if mode is not None:
+            frame = frame[frame["mode"] == mode]
+        return frame.assign(model=self.name)
 
 
 def load_saved_runs(
@@ -126,12 +184,16 @@ def load_saved_runs(
 ) -> list[SavedRun]:
     """Load every configured guard that already has a complete saved run.
 
-    Guards come in config file name order. A guard is compared under the first policy its
-    config lists, so each guard contributes exactly one decision rule.
+    The baseline (`DEFAULT_CONFIG`) comes first, the rest follow in config file name order.
+    The primary policy of a guard is the first one its config lists.
     """
     root = Path(root)
     runs = []
-    for path in sorted((root / config_dir).glob("*.yaml")):
+    paths = sorted(
+        (root / config_dir).glob("*.yaml"),
+        key=lambda path: (path.name != DEFAULT_CONFIG.name, path.name),
+    )
+    for path in paths:
         config = yaml.safe_load(path.read_text())
         if not saved_run_exists(config, profile=profile, root=root):
             continue
@@ -147,6 +209,44 @@ def load_saved_runs(
             )
         )
     return runs
+
+
+def sweep_saved_run(
+    item: SavedRun,
+    *,
+    dataset: pd.DataFrame,
+    rules: list[dict[str, Any]],
+    mode: str,
+    profile: str,
+    root: str | Path = ".",
+) -> pd.DataFrame:
+    """Replay one guard under many stop rules and every policy it has; one row per rule.
+
+    A probability threshold replaces the labels of the guard, so it is tried under the
+    primary policy only. `default` marks the rule the guard is configured with.
+    """
+    experiment = item.config["experiment"]
+    label_rules = [rule for rule in rules if rule.get("threshold") is None]
+    grids = []
+    for policy in item.policies:
+        grid = sweep_decision_rules(
+            dataset=dataset,
+            output_dir=Path(root) / experiment["output_dir"],
+            profile=profile,
+            policy=policy,
+            rules=rules if policy == item.policy else label_rules,
+            mode=mode,
+            max_sentence_tokens=experiment["max_sentence_tokens"],
+            checkpoint_scoring=item.checkpoint_scoring,
+        )
+        grid["default"] = (
+            (policy == item.policy)
+            & grid["threshold"].isna()
+            & (grid["trigger_count"] == experiment.get("trigger_count", 1))
+            & (grid["trigger_mode"] == experiment.get("trigger_mode", "cumulative"))
+        )
+        grids.append(grid.assign(model=item.name, policy=policy))
+    return pd.concat(grids, ignore_index=True)
 
 
 def build_guard(config: dict[str, Any]) -> Any:

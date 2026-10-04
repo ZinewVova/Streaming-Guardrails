@@ -215,3 +215,37 @@ def test_mode_error_rates_plot_has_one_row_per_mode():
     figure = plots.plot_mode_error_rates(metrics, title="response")
     assert len(figure.axes) >= 2
     assert [label.get_text() for label in figure.axes[0].get_yticklabels()] == list(MODES)
+
+
+def test_comparison_figures_for_guards_with_mode_dependent_errors():
+    rows = []
+    for model, modes in (("stream", ("token", "sentence")), ("prefix", ("sentence",))):
+        for mode in modes:
+            for policy in ("strict", "conservative"):
+                rows.append(
+                    {
+                        "model": model,
+                        "mode": mode,
+                        "policy": policy,
+                        "false_positive_rate": 0.2,
+                        "false_positive_ci_low": 0.1,
+                        "false_positive_ci_high": 0.3,
+                        "false_negative_rate": 0.1,
+                        "false_negative_ci_low": 0.05,
+                        "false_negative_ci_high": 0.2,
+                        "tflops": 0.2 if model == "stream" else 3.0,
+                    }
+                )
+    metrics = pd.DataFrame(rows)
+    sentence = metrics[metrics["mode"] == "sentence"]
+    figures = [
+        plots.plot_model_mode_errors(metrics[metrics["policy"] == "strict"]),
+        plots.plot_error_tradeoff(sentence),
+        plots.plot_cost_quality(
+            sentence[sentence["policy"] == "strict"], column="tflops", label="TFLOPs", log=True
+        ),
+    ]
+    assert figures[2].axes[0].get_xscale() == "log"
+    # Both policies of a guard share its colour, so the legend also explains the fill.
+    assert "conservative" in [text.get_text() for text in figures[1].axes[0].get_legend().texts]
+    assert all(figure.axes for figure in figures)

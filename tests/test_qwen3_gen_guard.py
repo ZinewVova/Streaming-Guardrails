@@ -274,7 +274,7 @@ def test_a_run_replayed_without_checkpoint_scoring_is_not_reused(tmp_path: Path)
     frame.to_parquet(tmp_path / "dataset.parquet", index=False)
     config = {
         "dataset": {"prepared_path": "dataset.parquet", "revision": "rev"},
-        "model": {"repository": "fake", "revision": "one", "tokenizer_revision": "one"},
+        "model": {"repository": "Qwen/Qwen3Guard-Gen-0.6B", "revision": None},
         "experiment": {
             "output_dir": "runs",
             "modes": ["chunk_8", "full_buffered"],

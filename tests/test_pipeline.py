@@ -111,7 +111,7 @@ def test_unknown_profile_fails_before_any_data_is_read(tmp_path: Path):
 def test_repository_configuration_matches_the_pipeline_contract():
     config = load_config()
     assert set(config["experiment"]["policies"]) == {"strict", "conservative"}
-    assert config["experiment"]["output_dir"] == "data/interim/qwen3guard"
+    assert config["experiment"]["output_dir"] == "data/interim/qwen3guard_stream_0_6b"
     assert set(config["experiment"]["modes"]) >= {"token", "full_buffered"}
 
 
@@ -180,7 +180,9 @@ def test_saved_runs_are_loaded_per_config_under_the_first_policy(tmp_path: Path)
 
     config = _project(tmp_path)
     config["model"]["repository"] = "org/first-guard"
-    run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard())
+    guard = CountingGuard()
+    guard.model_id = "org/first-guard"
+    run_or_load(config, profile="smoke2", root=tmp_path, guard=guard)
     unfinished = {**config, "experiment": {**config["experiment"], "output_dir": "missing"}}
     (tmp_path / "configs").mkdir()
     (tmp_path / "configs" / "a.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
@@ -191,3 +193,38 @@ def test_saved_runs_are_loaded_per_config_under_the_first_policy(tmp_path: Path)
     assert runs[0].policy == "strict"
     assert set(runs[0].results["policy"]) == {"strict"}
     assert set(runs[0].results["model"]) == {"first-guard"}
+
+
+def test_tables_are_rebuilt_from_saved_traces_without_the_model(tmp_path: Path, monkeypatch):
+    from streamguard_bench import pipeline
+
+    config = _project(tmp_path)
+    run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard())
+    monkeypatch.setattr(pipeline, "build_guard", ForbiddenGuard())
+    config["experiment"]["modes"] = ["token"]
+
+    rebuilt = run_or_load(config, profile="smoke2", root=tmp_path)
+    assert set(rebuilt.intervention_results["mode"]) == {"token"}
+
+
+def test_a_run_made_by_another_model_revision_is_not_reused(tmp_path: Path):
+    config = _project(tmp_path)
+    run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard())
+    config["model"]["revision"] = "two"
+    assert not saved_run_exists(config, profile="smoke2", root=tmp_path)
+
+
+def test_the_baseline_guard_comes_first_whatever_its_file_name(tmp_path: Path):
+    import yaml
+
+    from streamguard_bench.pipeline import DEFAULT_CONFIG, load_saved_runs
+
+    config = _project(tmp_path)
+    run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard())
+    (tmp_path / "configs").mkdir()
+    for name, label in (("a.yaml", "earlier"), (DEFAULT_CONFIG.name, "baseline")):
+        named = {**config, "model": {**config["model"], "display_name": label}}
+        (tmp_path / "configs" / name).write_text(yaml.safe_dump(named, sort_keys=False))
+
+    runs = load_saved_runs(profile="smoke2", root=tmp_path)
+    assert [item.name for item in runs] == ["baseline", "earlier"]

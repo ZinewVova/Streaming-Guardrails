@@ -141,7 +141,7 @@ def test_config_and_factory(monkeypatch):
         return name
 
     monkeypatch.setattr(guards, cls.__name__, factory)
-    config = load_config(f"configs/{name}.yaml")
+    config = load_config("configs/sentguard_4b.yaml")
     assert build_guard(config) == name
     assert len(captured["revision"]) == 40
     assert config["experiment"]["trigger_count"] == 1
@@ -198,8 +198,8 @@ def test_nf4_has_distinct_scoring_identity_and_rejects_unknown_format(tmp_path):
 
 
 def test_nf4_config_keeps_original_checkpoint_and_separate_results():
-    original = load_config("configs/sentguard.yaml")
-    quantized = load_config("configs/sentguard_nf4.yaml")
+    original = load_config("configs/sentguard_4b.yaml")
+    quantized = load_config("configs/sentguard_4b_nf4.yaml")
     assert quantized["model"]["revision"] == original["model"]["revision"]
     assert quantized["model"]["quantization"] == "nf4"
     assert quantized["experiment"]["output_dir"] != original["experiment"]["output_dir"]

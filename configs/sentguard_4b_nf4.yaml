@@ -4,7 +4,11 @@ dataset:
   prepared_path: data/processed/singstreambench.parquet
 model:
   adapter: sentguard
+  display_name: SentGuard-4B (NF4)
+  quantization: nf4
   repository: Solitude0630/SentGuard
+  # Nominal size, used only to express the cost of a run in FLOPs.
+  parameters: 4000000000
   revision: efb202c2aefeb8a6bdf7e3eefe62cd020d499df1
   tokenizer_revision: efb202c2aefeb8a6bdf7e3eefe62cd020d499df1
   # Released checkpoint emits evidence before answer; follow its card (512),
@@ -13,13 +17,20 @@ model:
 experiment:
   profile: smoke2
   seed: 42
-  modes: [token, chunk_8, chunk_16, chunk_32, sentence, full_buffered]
+  # SentGuard is asked at the end of every sentence and once more on the complete response,
+  # so only these two modes have their own checks.
+  modes: [sentence, full_buffered]
+  # strict blocks uncertain+unsafe and is the rule of the SentGuard paper; conservative
+  # blocks unsafe only.
   policies:
     strict: [controversial, unsafe]
     conservative: [unsafe]
+  # Each mode is replayed on the checks made at its own checkpoints.
+  checkpoint_scoring: true
+  # The first non-safe verdict stops the stream.
   trigger_count: 1
   max_sentence_tokens: 128
-  output_dir: data/interim/sentguard
+  output_dir: data/interim/sentguard_4b_nf4
 runtime:
-  device: null
+  device: cuda:0
   resume: true

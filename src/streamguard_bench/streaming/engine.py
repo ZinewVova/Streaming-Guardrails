@@ -217,23 +217,21 @@ def relabel_trace(
 
     A token becomes `unsafe` when its unsafe probability reaches the threshold. With
     `include_controversial` the controversial probability is added first, which is the
-    thresholded counterpart of the strict policy.
+    thresholded counterpart of the strict policy. Tokens without a score were not shown to
+    the guard (it was asked only at buffer checkpoints) and stay as they are.
     """
+    if all(item.unsafe_score is None for item in trace.decisions):
+        raise ValueError("Trace has no unsafe_score; its labels cannot be re-thresholded")
 
-    def score(item: ResponseTokenDecision) -> float:
+    def relabel(item: ResponseTokenDecision) -> ResponseTokenDecision:
         if item.unsafe_score is None:
-            raise ValueError("Trace has no unsafe_score; its labels cannot be re-thresholded")
-        if not include_controversial:
-            return item.unsafe_score
-        return item.unsafe_score + (item.controversial_score or 0.0)
+            return item
+        score = item.unsafe_score
+        if include_controversial:
+            score += item.controversial_score or 0.0
+        return replace(item, risk_label="unsafe" if score >= threshold else "safe")
 
-    return replace(
-        trace,
-        decisions=tuple(
-            replace(item, risk_label="unsafe" if score(item) >= threshold else "safe")
-            for item in trace.decisions
-        ),
-    )
+    return replace(trace, decisions=tuple(relabel(item) for item in trace.decisions))
 
 
 def _fired(

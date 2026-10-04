@@ -1,3 +1,4 @@
+from .cost import prefix_cost, streaming_cost, summarise_cost
 from .streaming import (
     bootstrap_ci,
     compute_prompt_metrics,
@@ -18,6 +19,9 @@ __all__ = [
     "paired_mode_differences",
     "paired_run_differences",
     "pairwise_run_differences",
+    "prefix_cost",
     "stopped_within",
+    "streaming_cost",
+    "summarise_cost",
     "wilson_interval",
 ]

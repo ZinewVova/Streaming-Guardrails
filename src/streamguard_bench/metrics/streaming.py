@@ -54,7 +54,21 @@ def compute_prompt_metrics(
     return pd.DataFrame(rows)
 
 
-def compute_response_policy_metrics(results: pd.DataFrame) -> pd.DataFrame:
+def compute_response_policy_metrics(
+    results: pd.DataFrame, *, by_mode: bool = False
+) -> pd.DataFrame:
+    """Block errors per policy.
+
+    A guard that scores every token blocks the same responses in every buffer mode, so one
+    mode is enough. A guard asked only at buffer checkpoints blocks differently in each
+    mode: pass `by_mode=True` to get one row per mode and policy.
+    """
+    if by_mode:
+        frames = [
+            compute_response_policy_metrics(group).assign(mode=mode)
+            for mode, group in results.groupby("mode", sort=False)
+        ]
+        return pd.concat(frames, ignore_index=True)
     base = results.sort_values("mode").drop_duplicates(["trace_id", "policy"])
     rows = []
     for policy, group in base.groupby("policy", sort=True):

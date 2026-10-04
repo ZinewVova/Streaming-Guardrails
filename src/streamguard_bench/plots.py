@@ -14,6 +14,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+from matplotlib.ticker import FuncFormatter
 
 MODE_ORDER = ("token", "chunk_8", "chunk_16", "chunk_32", "sentence", "full_buffered")
 MODE_PALETTE = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300")
@@ -583,13 +584,19 @@ def _model_handles(colors: dict[str, str]) -> list[Line2D]:
     ]
 
 
-def plot_error_tradeoff(metrics: pd.DataFrame) -> Figure:
-    """False blocks against misses, one point per guard, with Wilson intervals on both axes."""
-    colors = _model_colors(metrics["model"])
+def plot_error_tradeoff(metrics: pd.DataFrame, *, subtitle: str | None = None) -> Figure:
+    """False blocks against misses with Wilson intervals on both axes.
+
+    One point per row. When a guard comes with several policies, the strict one is drawn
+    filled and the conservative one hollow.
+    """
+    colors = _model_colors(metrics["model"].drop_duplicates())
+    policies = "policy" in metrics and metrics.groupby("model")["policy"].nunique().max() > 1
     figure, axis = _figure(figsize=(6.4, 5.2))
     _style(axis, grid_axis="both")
     for record in metrics.to_dict("records"):
         color = colors[record["model"]]
+        hollow = policies and record["policy"] == "conservative"
         x, y = record["false_positive_rate"], record["false_negative_rate"]
         axis.plot(
             [record["false_positive_ci_low"], record["false_positive_ci_high"]],
@@ -603,7 +610,16 @@ def plot_error_tradeoff(metrics: pd.DataFrame) -> Figure:
             color=color,
             linewidth=2,
         )
-        axis.plot(x, y, "o", color=color, markersize=9, zorder=3)
+        axis.plot(
+            x,
+            y,
+            "o",
+            color=color,
+            markerfacecolor=SURFACE if hollow else color,
+            markeredgewidth=2,
+            markersize=9,
+            zorder=3,
+        )
     limit = max(
         metrics["false_positive_ci_high"].max(), metrics["false_negative_ci_high"].max(), 0.1
     )
@@ -611,9 +627,75 @@ def plot_error_tradeoff(metrics: pd.DataFrame) -> Figure:
     axis.set_ylim(0, limit * 1.08)
     axis.set_xlabel("доля заблокированных безопасных ответов", color=MUTED, fontsize=9)
     axis.set_ylabel("доля пропущенных вредных ответов", color=MUTED, fontsize=9)
-    _legend_below(axis, _model_handles(colors), ncols=min(len(colors), 3), pad=-0.16)
-    _title(axis, "Два вида ошибок блокировки ответа", "ближе к началу координат — лучше; 95% CI")
+    handles = _model_handles(colors)
+    if policies:
+        handles += [
+            Line2D([], [], color=MUTED, marker="o", linewidth=0, label="strict"),
+            Line2D(
+                [],
+                [],
+                color=MUTED,
+                marker="o",
+                markerfacecolor=SURFACE,
+                markeredgewidth=2,
+                linewidth=0,
+                label="conservative",
+            ),
+        ]
+    _legend_below(axis, handles, ncols=min(len(handles), 3), pad=-0.16)
+    _title(
+        axis,
+        "Два вида ошибок блокировки ответа",
+        subtitle or "ближе к началу координат — лучше; 95% CI",
+    )
     figure.tight_layout()
+    return figure
+
+
+def plot_model_mode_errors(metrics: pd.DataFrame) -> Figure:
+    """Both block errors per buffer mode for several guards, with 95% Wilson intervals.
+
+    `metrics` has one row per guard and mode. A guard that scores every token has the same
+    errors in every mode; a guard asked at buffer checkpoints does not.
+    """
+    modes = _modes(metrics)
+    colors = _model_colors(metrics["model"].drop_duplicates())
+    offsets = np.linspace(-0.27, 0.27, len(colors)) if len(colors) > 1 else [0.0]
+    figure, axes = _figure(1, 2, figsize=(10, 0.8 * len(modes) + 2.4), sharey=True)
+    panels = [
+        ("false_positive", "безопасное заблокировано"),
+        ("false_negative", "опасное пропущено"),
+    ]
+    for axis, (prefix, label) in zip(axes, panels, strict=True):
+        _style(axis, grid_axis="x")
+        for offset, (model, color) in zip(offsets, colors.items(), strict=True):
+            for position, mode in enumerate(modes):
+                rows = metrics[(metrics["mode"] == mode) & (metrics["model"] == model)]
+                if rows.empty:
+                    continue
+                row = rows.iloc[0]
+                axis.plot(
+                    [row[f"{prefix}_ci_low"], row[f"{prefix}_ci_high"]],
+                    [position + offset] * 2,
+                    color=color,
+                    linewidth=2,
+                )
+                axis.plot(row[f"{prefix}_rate"], position + offset, "o", color=color, markersize=7)
+        axis.set_xlim(-0.02, 0.6)
+        axis.set_xlabel(f"доля, {label} (95% Wilson CI)", color=MUTED, fontsize=9)
+    axes[0].set_yticks(range(len(modes)), modes)
+    axes[0].invert_yaxis()
+    figure.legend(
+        handles=_model_handles(colors),
+        loc="lower center",
+        ncols=min(len(colors), 4),
+        frameon=False,
+        fontsize=9,
+    )
+    figure.suptitle(
+        "Ошибки блокировки по режимам буфера", color=INK, fontsize=13, x=0.02, ha="left"
+    )
+    figure.tight_layout(rect=(0, 0.08, 1, 0.94))
     return figure
 
 
@@ -713,7 +795,7 @@ def plot_rule_frontier(grid: pd.DataFrame) -> Figure:
             markersize=12,
             markeredgecolor=INK,
             linewidth=0,
-            label="правило по умолчанию",
+            label="правило авторов",
         )
     ]
     _legend_below(axis, handles, ncols=min(len(handles), 3), pad=-0.16)
@@ -775,7 +857,7 @@ def plot_pairwise_matrix(
     return figure
 
 
-def plot_stopping_curves(curves: pd.DataFrame) -> Figure:
+def plot_stopping_curves(curves: pd.DataFrame, *, subtitle: str = "выше и левее — лучше") -> Figure:
     """How much harmful text gets out before each guard stops the stream."""
     colors = _model_colors(curves["model"].drop_duplicates())
     figure, axis = _figure(figsize=(8, 4.4))
@@ -790,25 +872,34 @@ def plot_stopping_curves(curves: pd.DataFrame) -> Figure:
     axis.set_xlabel("слов вредного фрагмента, ушедших пользователю", color=MUTED, fontsize=9)
     axis.set_ylabel("доля остановленных вредных ответов", color=MUTED, fontsize=9)
     _legend_below(axis, _model_handles(colors), ncols=min(len(colors), 3), pad=-0.2)
-    _title(axis, "Как быстро останавливается вредный ответ", "выше и левее — лучше")
+    _title(axis, "Как быстро останавливается вредный ответ", subtitle)
     figure.tight_layout()
     return figure
 
 
-def plot_cost_quality(summary: pd.DataFrame) -> Figure:
-    """Per-token latency against both block errors, one labelled point per guard."""
+def plot_cost_quality(
+    summary: pd.DataFrame,
+    *,
+    column: str = "latency_ms",
+    label: str = "медианное время проверки токена, мс",
+    log: bool = False,
+) -> Figure:
+    """Cost against both block errors, one labelled point per guard.
+
+    `column` holds the cost; use a log axis when guards differ by orders of magnitude.
+    """
     colors = _model_colors(summary["model"])
     panels = (
         ("false_negative_rate", "доля пропущенных вредных ответов"),
         ("false_positive_rate", "доля заблокированных безопасных ответов"),
     )
     figure, axes = _figure(1, 2, figsize=(10, 4), sharex=True)
-    for axis, (column, label) in zip(axes, panels, strict=True):
+    for axis, (error, error_label) in zip(axes, panels, strict=True):
         _style(axis, grid_axis="both")
-        for record in summary.to_dict("records"):
+        for index, record in enumerate(summary.to_dict("records")):
             axis.plot(
-                record["latency_ms"],
                 record[column],
+                record[error],
                 "o",
                 color=colors[record["model"]],
                 markersize=10,
@@ -816,16 +907,22 @@ def plot_cost_quality(summary: pd.DataFrame) -> Figure:
             )
             axis.annotate(
                 record["model"],
-                (record["latency_ms"], record[column]),
+                (record[column], record[error]),
                 textcoords="offset points",
-                xytext=(8, 6),
+                # Labels alternate above and below so that close points stay readable.
+                xytext=(8, 6) if index % 2 == 0 else (8, -15),
                 color=MUTED,
                 fontsize=9,
             )
-        axis.set_xlim(0, summary["latency_ms"].max() * 1.6)
-        axis.set_ylim(0, max(summary[column].max() * 1.4, 0.1))
-        axis.set_xlabel("медианное время проверки токена, мс", color=MUTED, fontsize=9)
-        axis.set_ylabel(label, color=MUTED, fontsize=9)
+        if log:
+            axis.set_xscale("log")
+            axis.set_xlim(summary[column].min() / 2, summary[column].max() * 8)
+            axis.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
+        else:
+            axis.set_xlim(0, summary[column].max() * 1.6)
+        axis.set_ylim(0, max(summary[error].max() * 1.4, 0.1))
+        axis.set_xlabel(label, color=MUTED, fontsize=9)
+        axis.set_ylabel(error_label, color=MUTED, fontsize=9)
     _title(axes[0], "Качество против стоимости", "ниже и левее — лучше")
     figure.tight_layout()
     return figure

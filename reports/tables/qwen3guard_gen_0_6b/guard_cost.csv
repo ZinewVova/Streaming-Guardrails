@@ -1,0 +1,11 @@
+mode,policy,model_calls,tokens,tokens_cached,tflops,tflops_cached
+chunk_8,strict,9.81,5361.529,1805.171,6.434,2.166
+chunk_8,conservative,11.114,6112.433,1973.324,7.335,2.368
+chunk_16,strict,6.595,3512.048,1433.962,4.214,1.721
+chunk_16,conservative,7.0,3765.7,1489.238,4.519,1.787
+chunk_32,strict,4.457,2331.352,1192.638,2.798,1.431
+chunk_32,conservative,4.633,2447.514,1219.071,2.937,1.463
+sentence,strict,5.043,2620.01,1252.324,3.144,1.503
+sentence,conservative,5.114,2666.1,1262.214,3.199,1.515
+full_buffered,strict,2.0,977.89,977.89,1.173,1.173
+full_buffered,conservative,2.0,977.89,977.89,1.173,1.173

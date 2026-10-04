@@ -5,6 +5,8 @@ dataset:
 model:
   adapter: scm
   repository: liyang-ict/SCM-0.5B
+  # Nominal size, used only to express the cost of a run in FLOPs.
+  parameters: 500000000
   revision: 55afd738531b1923c76f6e8f996172fadbcfc4ae
   tokenizer_revision: 55afd738531b1923c76f6e8f996172fadbcfc4ae
   # A token counts as harmful when its score reaches the threshold. Together with

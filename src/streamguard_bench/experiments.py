@@ -71,7 +71,7 @@ def run_experiment(
     profile: str = "smoke2",
     modes: tuple[str, ...] | list[str] = tuple(item.value for item in DEFAULT_MODES),
     policies: tuple[str, ...] | list[str] = tuple(item.value for item in DEFAULT_POLICIES),
-    output_dir: str | Path = "data/interim/qwen3guard",
+    output_dir: str | Path = "data/interim/qwen3guard_stream_0_6b",
     resume: bool = True,
     seed: int = 42,
     max_sentence_tokens: int = 128,
@@ -79,7 +79,16 @@ def run_experiment(
     trigger_count: int = 1,
     trigger_mode: str = "cumulative",
     trigger_window: int | None = None,
+    checkpoint_scoring: bool | None = None,
 ) -> ExperimentRun:
+    """Score the selected traces and replay them under the configured modes and stop rule.
+
+    `checkpoint_scoring` says that the guard was asked only at buffer checkpoints, so each
+    mode is replayed on the decisions made at its own checkpoints. By default the guard
+    declares it itself.
+    """
+    if checkpoint_scoring is None:
+        checkpoint_scoring = bool(getattr(guard, "checkpoint_scoring", False))
     selected = select_profile_traces(dataset, profile)
     selected_modes = tuple(BufferMode(item) for item in modes)
     selected_policies = tuple(SafetyPolicy(item) for item in policies)
@@ -99,6 +108,7 @@ def run_experiment(
         trigger_count,
         trigger_mode,
         trigger_window,
+        checkpoint_scoring,
     )
     _validate_or_write(run_dir / "run_metadata.json", metadata, resume)
     _write_json(run_dir / "selected_trace_ids.json", list(selected_ids))
@@ -155,7 +165,7 @@ def run_experiment(
         trigger_count,
         trigger_mode,
         trigger_window,
-        checkpoint_scoring=bool(getattr(guard, "checkpoint_scoring", False)),
+        checkpoint_scoring=checkpoint_scoring,
     )
     error_frame = pd.DataFrame(errors, columns=["trace_id", "error_type", "error"])
     prompt_frame.to_parquet(run_dir / "prompt_decisions.parquet", index=False)
@@ -168,7 +178,7 @@ def run_experiment(
 
 
 def load_experiment_run(
-    output_dir: str | Path = "data/interim/qwen3guard", *, profile: str = "smoke2"
+    output_dir: str | Path = "data/interim/qwen3guard_stream_0_6b", *, profile: str = "smoke2"
 ) -> ExperimentRun:
     run_dir = Path(output_dir) / profile
     paths = {key: run_dir / name for key, name in RESULT_FILES.items()}
@@ -247,8 +257,7 @@ def sweep_decision_rules(
     selected = select_profile_traces(dataset, profile)
     saved = _load_traces(selected, output_dir, profile)
     has_scores = bool(saved) and all(
-        item.unsafe_score is not None
-        for trace in saved.values() for item in trace.decisions
+        any(item.unsafe_score is not None for item in trace.decisions) for trace in saved.values()
     )
     rows = []
     for rule in rules:
@@ -446,6 +455,7 @@ def _metadata(
     trigger_count,
     trigger_mode="cumulative",
     trigger_window=None,
+    checkpoint_scoring=False,
 ):
     value = {
         "schema_version": SCHEMA_VERSION,
@@ -475,7 +485,7 @@ def _metadata(
         value["trigger_window"] = trigger_window
     if getattr(guard, "threshold", None) is not None:
         value["threshold"] = guard.threshold
-    if getattr(guard, "checkpoint_scoring", False):
+    if checkpoint_scoring:
         value["checkpoint_scoring"] = True
     if getattr(guard, "inference_settings", None) is not None:
         value["inference_settings"] = guard.inference_settings

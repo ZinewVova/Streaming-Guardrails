@@ -4,6 +4,8 @@ dataset:
   prepared_path: data/processed/singstreambench.parquet
 model:
   repository: Qwen/Qwen3Guard-Stream-0.6B
+  # Nominal size, used only to express the cost of a run in FLOPs.
+  parameters: 600000000
   revision: 419364a715de9840d47b1457982f64ff37f90ed4
   tokenizer_revision: 419364a715de9840d47b1457982f64ff37f90ed4
 experiment:
@@ -19,7 +21,7 @@ experiment:
   trigger_mode: consecutive
   trigger_count: 2
   max_sentence_tokens: 128
-  output_dir: data/interim/qwen3guard
+  output_dir: data/interim/qwen3guard_stream_0_6b
 runtime:
   device: null
   resume: true

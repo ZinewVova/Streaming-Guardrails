@@ -23,12 +23,8 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     config = load_config(args.config)
-    run_name = Path(config["experiment"]["output_dir"]).name
     run = load_experiment_run(config["experiment"]["output_dir"], profile=args.profile)
-    # The Qwen3Guard baseline keeps its original location; other guards get a subfolder.
-    full_reports = Path("reports/tables")
-    if run_name != "qwen3guard":
-        full_reports = full_reports / run_name
+    full_reports = Path("reports/tables") / Path(config["experiment"]["output_dir"]).name
     output = args.output or (full_reports if args.profile == "full" else run.output_dir / "reports")
     output.mkdir(parents=True, exist_ok=True)
     policies = tuple(config["experiment"]["policies"])
@@ -37,9 +33,9 @@ def main() -> None:
         compute_prompt_metrics(evaluated, policies).to_csv(
             output / "prompt_metrics.csv", index=False
         )
-    compute_response_policy_metrics(run.intervention_results).to_csv(
-        output / "response_policy_metrics.csv", index=False
-    )
+    compute_response_policy_metrics(
+        run.intervention_results, by_mode=bool(config["experiment"].get("checkpoint_scoring"))
+    ).to_csv(output / "response_policy_metrics.csv", index=False)
     compute_streaming_metrics(run.intervention_results).to_csv(
         output / "streaming_metrics.csv", index=False
     )

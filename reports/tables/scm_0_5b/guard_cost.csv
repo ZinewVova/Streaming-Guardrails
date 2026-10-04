@@ -1,0 +1,7 @@
+mode,policy,model_calls,tokens,tokens_cached,tflops,tflops_cached
+token,conservative,113.867,163.933,163.933,0.164,0.164
+chunk_8,conservative,115.976,166.043,166.043,0.166,0.166
+chunk_16,conservative,118.143,168.21,168.21,0.168,0.168
+chunk_32,conservative,123.105,173.171,173.171,0.173,0.173
+sentence,conservative,124.414,174.481,174.481,0.174,0.174
+full_buffered,conservative,187.281,237.348,237.348,0.237,0.237

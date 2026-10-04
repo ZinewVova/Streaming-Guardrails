@@ -6,13 +6,13 @@
 #
 # Рецепты состоят из одной команды каждая, поэтому работают и в sh, и в cmd.exe.
 
-MODEL ?= qwen3guard_baseline
+MODEL ?= qwen3guard_stream_0_6b
 PROFILE ?= smoke2
 CONFIG := configs/$(MODEL).yaml
 NOTEBOOKS := notebooks/02_streaming_benchmark.ipynb notebooks/03_sentguard_benchmark.ipynb notebooks/04_scm_benchmark.ipynb notebooks/05_qwen3guard_gen_benchmark.ipynb notebooks/06_model_comparison.ipynb
 
 .DEFAULT_GOAL := help
-.PHONY: help models install install-models data test lint check run smoke full rerun reports notebooks figures
+.PHONY: help models install install-models data test lint check run smoke full rerun reports cost notebooks figures
 
 help: ## Показать этот список команд
 	@uv run python -c "import re; [print(f'  make {m[1]:<16}{m[2]}') for m in re.finditer(r'^([a-z-]+):.*?## (.*)$$', open('Makefile', encoding='utf-8').read(), re.M)]"
@@ -57,11 +57,14 @@ smoke: ## Быстрая проверка кода на двух трассах:
 full: ## Полный прогон на 210 трассах: make full MODEL=scm_0_5b
 	uv run python scripts/run_guard.py --config $(CONFIG) --profile full
 
-rerun: ## Пересобрать таблицы прогона из сохранённых трасс, без повторной оценки моделью
+rerun: ## Пересобрать таблицы прогона из сохранённых трасс; веса модели не нужны
 	uv run python scripts/run_guard.py --config $(CONFIG) --profile $(PROFILE) --force
 
 reports: ## CSV-отчёты по сохранённому прогону: make reports MODEL=scm_0_5b PROFILE=full
 	uv run python scripts/build_reports.py --config $(CONFIG) --profile $(PROFILE)
+
+cost: ## Посчитать объём вычислений каждой модели по сохранённым полным прогонам
+	uv run python scripts/build_cost.py
 
 # --- Ноутбуки ----------------------------------------------------------------
 

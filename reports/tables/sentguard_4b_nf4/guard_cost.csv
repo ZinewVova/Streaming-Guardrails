@@ -1,0 +1,5 @@
+mode,policy,model_calls,tokens,tokens_cached,tflops,tflops_cached
+sentence,strict,3.771,994.862,420.248,7.959,3.362
+sentence,conservative,6.233,1910.938,623.695,15.288,4.99
+full_buffered,strict,1.0,353.233,353.233,2.826,2.826
+full_buffered,conservative,1.0,353.233,353.233,2.826,2.826
