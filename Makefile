@@ -9,7 +9,7 @@
 MODEL ?= qwen3guard_baseline
 PROFILE ?= smoke2
 CONFIG := configs/$(MODEL).yaml
-NOTEBOOKS := notebooks/02_streaming_benchmark.ipynb notebooks/04_scm_benchmark.ipynb notebooks/05_qwen3guard_gen_benchmark.ipynb notebooks/06_model_comparison.ipynb
+NOTEBOOKS := notebooks/02_streaming_benchmark.ipynb notebooks/03_sentguard_benchmark.ipynb notebooks/04_scm_benchmark.ipynb notebooks/05_qwen3guard_gen_benchmark.ipynb notebooks/06_model_comparison.ipynb
 
 .DEFAULT_GOAL := help
 .PHONY: help models install install-models data test lint check run smoke full rerun reports notebooks figures
