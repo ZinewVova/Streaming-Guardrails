@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,9 +31,27 @@ def results_dir(config: dict[str, Any], *, profile: str, root: str | Path = ".")
 
 
 def saved_run_exists(config: dict[str, Any], *, profile: str, root: str | Path = ".") -> bool:
-    """True when the profile already has a complete saved run on disk."""
+    """True when the profile has a complete saved run replayed under the configured rule.
+
+    Tables replayed under another stop rule, policy set or mode list do not count: they
+    would be read as if they answered the current configuration.
+    """
     directory = results_dir(config, profile=profile, root=root)
-    return all((directory / name).exists() for name in RESULT_FILES.values())
+    if not all((directory / name).exists() for name in RESULT_FILES.values()):
+        return False
+    metadata_path = directory / "run_metadata.json"
+    if not metadata_path.exists():
+        return True
+    saved = json.loads(metadata_path.read_text())
+    experiment = config["experiment"]
+    return (
+        saved["modes"] == list(experiment["modes"])
+        and [item["name"] for item in saved["policies"]] == list(experiment["policies"])
+        and saved["max_sentence_tokens"] == experiment["max_sentence_tokens"]
+        and saved.get("trigger_count", 1) == experiment.get("trigger_count", 1)
+        and saved.get("trigger_mode", "cumulative") == experiment.get("trigger_mode", "cumulative")
+        and saved.get("trigger_window") == experiment.get("trigger_window")
+    )
 
 
 def run_or_load(

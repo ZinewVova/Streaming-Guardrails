@@ -134,17 +134,33 @@ def test_unknown_adapter_is_rejected():
         build_guard(config)
 
 
-def test_trigger_count_reaches_the_replay_and_changes_the_run_identity(tmp_path: Path):
+def test_changing_the_stop_rule_replays_saved_traces_without_scoring(tmp_path: Path):
     config = _project(tmp_path)
     config["experiment"]["trigger_count"] = 2
-    run = run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard())
+    guard = CountingGuard()
+    run = run_or_load(config, profile="smoke2", root=tmp_path, guard=guard)
     assert set(run.intervention_results["trigger_count"]) == {2}
     # One flagged token is not enough for k = 2, so nothing is blocked.
     assert not run.intervention_results["blocked"].any()
+    scored = guard.scored
 
     config["experiment"]["trigger_count"] = 1
+    # Tables saved under k = 2 must not be read as the answer for k = 1.
+    assert not saved_run_exists(config, profile="smoke2", root=tmp_path)
+    replayed = run_or_load(config, profile="smoke2", root=tmp_path, guard=guard)
+    assert guard.scored == scored
+    assert set(replayed.intervention_results["trigger_count"]) == {1}
+    assert replayed.intervention_results["blocked"].any()
+    assert saved_run_exists(config, profile="smoke2", root=tmp_path)
+
+
+def test_another_model_revision_cannot_reuse_the_run_directory(tmp_path: Path):
+    config = _project(tmp_path)
+    run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard())
+    other = CountingGuard()
+    other.model_revision = "two"
     with pytest.raises(ValueError, match="different configuration"):
-        run_or_load(config, profile="smoke2", root=tmp_path, guard=CountingGuard(), force=True)
+        run_or_load(config, profile="smoke2", root=tmp_path, guard=other, force=True)
 
 
 def test_tokenization_mismatch_is_reported_as_a_trace_error(tmp_path: Path):

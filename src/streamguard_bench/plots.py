@@ -257,7 +257,7 @@ def plot_trace_timeline(
         ),
     ]
     if len(signal):
-        handles.append(Line2D([], [], color=LABEL_COLORS["unsafe"], label="первый сигнал"))
+        handles.append(Line2D([], [], color=LABEL_COLORS["unsafe"], label="правило сработало"))
     if onset_token is not None:
         handles.append(Line2D([], [], color=INK, linestyle=(0, (5, 3)), label="истинный onset"))
     handles = top.get_legend_handles_labels()[0] + handles

@@ -458,14 +458,33 @@ def _metadata(
     return value
 
 
+# Settings that only affect the replay. Checkpoints hold per-token decisions, which do not
+# depend on them, so a run may be replayed under another stop rule without rescoring.
+REPLAY_SETTINGS = frozenset(
+    {
+        "modes",
+        "policies",
+        "max_sentence_tokens",
+        "trigger_count",
+        "trigger_mode",
+        "trigger_window",
+        "configuration_sha256",
+    }
+)
+
+
 def _validate_or_write(path: Path, metadata: dict[str, Any], resume: bool) -> None:
     if path.exists():
-        if json.loads(path.read_text()) != metadata:
+        saved = json.loads(path.read_text())
+        if _scoring_identity(saved) != _scoring_identity(metadata):
             raise ValueError("Existing run uses a different configuration or checkpoint schema")
         if not resume:
             raise FileExistsError("Run directory exists and resume=False")
-    else:
-        _write_json(path, metadata)
+    _write_json(path, metadata)
+
+
+def _scoring_identity(metadata: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in metadata.items() if key not in REPLAY_SETTINGS}
 
 
 def _write_json(path: Path, value: Any) -> None:
