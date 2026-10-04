@@ -155,6 +155,7 @@ def run_experiment(
         trigger_count,
         trigger_mode,
         trigger_window,
+        checkpoint_scoring=bool(getattr(guard, "checkpoint_scoring", False)),
     )
     error_frame = pd.DataFrame(errors, columns=["trace_id", "error_type", "error"])
     prompt_frame.to_parquet(run_dir / "prompt_decisions.parquet", index=False)
@@ -197,8 +198,15 @@ def replay_saved_traces(
     trigger_mode: str = "cumulative",
     trigger_window: int | None = None,
     include_controversial: bool = False,
+    checkpoint_scoring: bool = False,
+    warmup_tokens: int = 0,
 ) -> pd.DataFrame:
-    """Replay checkpointed traces under another decision rule without scoring them again."""
+    """Replay checkpointed traces under another decision rule without scoring them again.
+
+    `checkpoint_scoring` is for guards that were scored only at buffer checkpoints: each mode
+    then sees only the decisions made at its own checkpoints. `warmup_tokens` additionally
+    skips the checks within the first tokens, which are then released unchecked.
+    """
 
     selected = select_profile_traces(dataset, profile)
     traces = _apply_threshold(
@@ -214,6 +222,8 @@ def replay_saved_traces(
         trigger_count,
         trigger_mode,
         trigger_window,
+        checkpoint_scoring,
+        warmup_tokens,
     )
 
 
@@ -226,6 +236,7 @@ def sweep_decision_rules(
     rules: list[dict[str, Any]],
     mode: str = "token",
     max_sentence_tokens: int = 128,
+    checkpoint_scoring: bool = False,
 ) -> pd.DataFrame:
     """Summarise saved traces under many stop rules; one row per rule.
 
@@ -249,6 +260,7 @@ def sweep_decision_rules(
             rule.get("trigger_count", 1),
             rule.get("trigger_mode", "cumulative"),
             rule.get("trigger_window"),
+            checkpoint_scoring,
         )
         metrics = compute_response_policy_metrics(results).iloc[0]
         harmful = results[results["response_ground_truth"] == "unsafe"]
@@ -330,6 +342,8 @@ def _replay(
     trigger_count=1,
     trigger_mode="cumulative",
     trigger_window=None,
+    checkpoint_scoring=False,
+    warmup_tokens=0,
 ):
     records = []
     by_id = {str(row["trace_id"]): row for row in selected.to_dict(orient="records")}
@@ -350,6 +364,8 @@ def _replay(
                 trigger_mode=trigger_mode,
                 trigger_window=trigger_window,
                 unsafe_start_character=int(row["unsafe_start_character"]),
+                checkpoint_scoring=checkpoint_scoring,
+                warmup_tokens=warmup_tokens,
             )
         )
     for failure in errors:
@@ -452,6 +468,8 @@ def _metadata(
         value["trigger_window"] = trigger_window
     if getattr(guard, "threshold", None) is not None:
         value["threshold"] = guard.threshold
+    if getattr(guard, "checkpoint_scoring", False):
+        value["checkpoint_scoring"] = True
     value["configuration_sha256"] = hashlib.sha256(
         json.dumps(value, sort_keys=True).encode()
     ).hexdigest()
@@ -468,6 +486,7 @@ REPLAY_SETTINGS = frozenset(
         "trigger_count",
         "trigger_mode",
         "trigger_window",
+        "checkpoint_scoring",
         "configuration_sha256",
     }
 )
