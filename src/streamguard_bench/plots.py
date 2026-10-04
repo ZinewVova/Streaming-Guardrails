@@ -94,10 +94,13 @@ def _valid(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_confusion_matrices(metrics: pd.DataFrame, *, title: str) -> Figure:
-    """One 2x2 count matrix per policy: rows are ground truth, columns the decision."""
+    """One 2x2 count matrix per policy: rows are ground truth, columns the decision.
+
+    Precision and recall of the blocking decision are printed under each matrix.
+    """
     policies = list(metrics["policy"])
     width = 3.6 * len(policies) + 0.6
-    figure, axes = _figure(1, len(policies), figsize=(width, 3.4), squeeze=False)
+    figure, axes = _figure(1, len(policies), figsize=(width, 3.9), squeeze=False)
     largest = max(metrics[["tp", "fp", "tn", "fn"]].to_numpy().max(), 1)
     for axis, (_, row) in zip(axes[0], metrics.iterrows(), strict=False):
         matrix = np.array([[row["tn"], row["fp"]], [row["fn"], row["tp"]]], dtype=float)
@@ -120,8 +123,21 @@ def plot_confusion_matrices(metrics: pd.DataFrame, *, title: str) -> Figure:
         for side in axis.spines.values():
             side.set_visible(False)
         _title(axis, f"policy: {row['policy']}", f"{int(row['traces'])} трасс")
+        blocked, unsafe = row["tp"] + row["fp"], row["tp"] + row["fn"]
+        precision = f"{row['tp'] / blocked:.1%}" if blocked else "—"
+        recall = f"{row['tp'] / unsafe:.1%}" if unsafe else "—"
+        axis.annotate(
+            f"precision {precision}  ·  recall {recall}",
+            xy=(0.5, 0),
+            xycoords="axes fraction",
+            xytext=(0, -44),
+            textcoords="offset points",
+            ha="center",
+            color=INK,
+            fontsize=10,
+        )
     figure.suptitle(title, color=INK, fontsize=13, x=0.02, ha="left")
-    figure.tight_layout(rect=(0, 0, 1, 0.94))
+    figure.tight_layout(rect=(0, 0.04, 1, 0.94))
     return figure
 
 
