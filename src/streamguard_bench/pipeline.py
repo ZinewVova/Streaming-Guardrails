@@ -43,6 +43,18 @@ def saved_run_exists(config: dict[str, Any], *, profile: str, root: str | Path =
     if not metadata_path.exists():
         return True
     saved = json.loads(metadata_path.read_text())
+    model = config.get("model", {})
+    if model.get("adapter") == "sentguard":
+        settings = saved.get("inference_settings", {})
+        if (
+            saved.get("model_id") != model["repository"]
+            or saved.get("model_revision") != model["revision"]
+            or settings.get("max_new_tokens") != model["max_new_tokens"]
+            or settings.get("quantization") != model.get("quantization")
+            or settings.get("generation_tokenizer_revision")
+            != (model["tokenizer_revision"] or model["revision"])
+        ):
+            return False
     experiment = config["experiment"]
     return (
         saved["modes"] == list(experiment["modes"])
@@ -125,7 +137,8 @@ def load_saved_runs(
             continue
         runs.append(
             SavedRun(
-                name=config["model"]["repository"].rsplit("/", 1)[-1],
+                name=config["model"].get("display_name")
+                or config["model"]["repository"].rsplit("/", 1)[-1],
                 config=config,
                 run=load_experiment_run(
                     output_dir=root / config["experiment"]["output_dir"], profile=profile
@@ -160,6 +173,15 @@ def build_guard(config: dict[str, Any]) -> Any:
             model["repository"],
             modes=config["experiment"]["modes"],
             max_sentence_tokens=config["experiment"]["max_sentence_tokens"],
+            **common,
+        )
+    if adapter == "sentguard":
+        from streamguard_bench.guards import SentGuardAdapter
+
+        return SentGuardAdapter(
+            model["repository"],
+            max_new_tokens=model["max_new_tokens"],
+            quantization=model.get("quantization"),
             **common,
         )
     raise ValueError(f"Unknown guard adapter: {adapter}")

@@ -32,6 +32,7 @@ class PromptDecision:
     safe_score: float | None = None
     controversial_score: float | None = None
     unsafe_score: float | None = None
+    raw_output: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -51,6 +52,9 @@ class ResponseTokenDecision:
     unsafe_score: float | None = None
     safe_score: float | None = None
     controversial_score: float | None = None
+    # False means this token carries no new guard observation (prefix guards).
+    evaluated: bool = True
+    raw_output: str | None = None
 
     def __post_init__(self) -> None:
         normalized = self.risk_label.lower()
@@ -83,7 +87,11 @@ class GuardTrace:
             raise ValueError("Checkpoint schema is obsolete; rerun this trace")
         data = dict(value)
         data["prompt_decision"] = PromptDecision(**data["prompt_decision"])
-        data["decisions"] = tuple(ResponseTokenDecision(**item) for item in data["decisions"])
+        # Early prefix checkpoints had an unused refusal field; keep them readable.
+        data["decisions"] = tuple(
+            ResponseTokenDecision(**{k: v for k, v in item.items() if k != "response_refusal"})
+            for item in data["decisions"]
+        )
         return cls(**data)
 
 

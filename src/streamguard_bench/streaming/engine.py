@@ -42,7 +42,7 @@ def simulate_intervention(
     blocking = selected_policy.blocking_labels
     checkpoints = _buffer_checkpoints(decisions, response, selected_mode, max_sentence_tokens)
     fired = _fired(
-        [item.risk_label in blocking for item in decisions],
+        [item.evaluated and item.risk_label in blocking for item in decisions],
         checkpoints,
         selected_trigger,
         trigger_count,

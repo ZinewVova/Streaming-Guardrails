@@ -1,0 +1,25 @@
+dataset:
+  repository: inclusionAI/SingStreamBench
+  revision: 957b703ca028af6aa834b95ec0893b81e4d24a71
+  prepared_path: data/processed/singstreambench.parquet
+model:
+  adapter: sentguard
+  repository: Solitude0630/SentGuard
+  revision: efb202c2aefeb8a6bdf7e3eefe62cd020d499df1
+  tokenizer_revision: efb202c2aefeb8a6bdf7e3eefe62cd020d499df1
+  # Released checkpoint emits evidence before answer; follow its card (512),
+  # rather than the paper's answer-first configuration (64).
+  max_new_tokens: 512
+experiment:
+  profile: smoke2
+  seed: 42
+  modes: [token, chunk_8, chunk_16, chunk_32, sentence, full_buffered]
+  policies:
+    strict: [controversial, unsafe]
+    conservative: [unsafe]
+  trigger_count: 1
+  max_sentence_tokens: 128
+  output_dir: data/interim/sentguard
+runtime:
+  device: null
+  resume: true

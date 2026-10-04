@@ -240,13 +240,20 @@ def sweep_decision_rules(
 ) -> pd.DataFrame:
     """Summarise saved traces under many stop rules; one row per rule.
 
-    A rule is a dict with any of `threshold`, `include_controversial`, `trigger_count`,
+    Probability thresholds are omitted for label-only guards, which cannot be
+    re-thresholded. A rule is a dict with `threshold`, `include_controversial`, `trigger_count`,
     `trigger_mode` and `trigger_window`. Without a threshold the stored labels are used.
     """
     selected = select_profile_traces(dataset, profile)
     saved = _load_traces(selected, output_dir, profile)
+    has_scores = bool(saved) and all(
+        item.unsafe_score is not None
+        for trace in saved.values() for item in trace.decisions
+    )
     rows = []
     for rule in rules:
+        if rule.get("threshold") is not None and not has_scores:
+            continue
         traces = _apply_threshold(
             saved, rule.get("threshold"), rule.get("include_controversial", False)
         )
@@ -470,6 +477,8 @@ def _metadata(
         value["threshold"] = guard.threshold
     if getattr(guard, "checkpoint_scoring", False):
         value["checkpoint_scoring"] = True
+    if getattr(guard, "inference_settings", None) is not None:
+        value["inference_settings"] = guard.inference_settings
     value["configuration_sha256"] = hashlib.sha256(
         json.dumps(value, sort_keys=True).encode()
     ).hexdigest()
